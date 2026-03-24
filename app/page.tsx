@@ -10,7 +10,6 @@ import ReactMarkdown from "react-markdown";
 
 type Conversation = { id: string; title: string; created_at: string };
 
-// ── Markdown 渲染 ──
 function MessageContent({ content, isDark }: { content: string; isDark: boolean }) {
   return (
     <ReactMarkdown components={{
@@ -38,7 +37,6 @@ function MessageContent({ content, isDark }: { content: string; isDark: boolean 
   );
 }
 
-// ── 複製按鈕 ──
 function CopyButton({ text, isDark }: { text: string; isDark: boolean }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -55,7 +53,6 @@ function CopyButton({ text, isDark }: { text: string; isDark: boolean }) {
   );
 }
 
-// ── Compare Mode 單則訊息 ──
 function CompareMessage({ role, content, isDark, aiBubble, userBubble, textMuted, cardBg, border }: {
   role: string; content: string; isDark: boolean;
   aiBubble: string; userBubble: string; textMuted: string; cardBg: string; border: string;
@@ -75,13 +72,10 @@ function CompareMessage({ role, content, isDark, aiBubble, userBubble, textMuted
   );
 }
 
-// ── Compare Mode 訊息列表（移到 Home 外部，ref 才能正常運作）──
 type MessageListProps = {
-  messages: any[];
-  isLoading: boolean;
+  messages: any[]; isLoading: boolean;
   endRef: React.RefObject<HTMLDivElement | null>;
-  isDark: boolean;
-  D: Record<string, string>;
+  isDark: boolean; D: Record<string, string>;
 };
 
 function MessageList({ messages, isLoading, endRef, isDark, D }: MessageListProps) {
@@ -114,10 +108,7 @@ function MessageList({ messages, isLoading, endRef, isDark, D }: MessageListProp
   );
 }
 
-// ════════════════════════════════════════
 export default function Home() {
-// ════════════════════════════════════════
-
   const [model, setModel] = useState("llama-3.1-8b-instant");
   const [model2, setModel2] = useState("llama-3.3-70b-versatile");
   const [systemPrompt, setSystemPrompt] = useState("");
@@ -134,6 +125,7 @@ export default function Home() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesEndRef2 = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("darkMode");
@@ -158,18 +150,25 @@ export default function Home() {
     },
   });
 
+  // chat2：Compare Mode 專用，用 append 直接加訊息
   const chat2 = useChat({
     api: "/api/chat",
     body: { model: model2, systemPrompt, temperature, maxTokens, topP, frequencyPenalty },
   });
 
-  // ── 自動捲到底部 ──
+  // ── 自動捲到底部（用 setTimeout 確保 DOM 更新後才捲）──
+  const scrollToBottom = (ref: React.RefObject<HTMLDivElement | null>) => {
+    setTimeout(() => {
+      ref.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 50);
+  };
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    scrollToBottom(messagesEndRef);
   }, [chat1.messages, chat1.isLoading]);
 
   useEffect(() => {
-    messagesEndRef2.current?.scrollIntoView({ behavior: "smooth" });
+    scrollToBottom(messagesEndRef2);
   }, [chat2.messages, chat2.isLoading]);
 
   useEffect(() => { fetchConversations(); }, []);
@@ -275,15 +274,12 @@ export default function Home() {
 
     if (isFirstMessage && convId) autoGenerateTitle(convId, userInput);
 
+    // 送給 chat1
     chat1.handleSubmit(e);
 
+    // ── Compare Mode：用 append 直接送給 chat2，不依賴 input state ──
     if (compareMode) {
-      setTimeout(() => {
-        chat2.setInput(userInput);
-        setTimeout(() => {
-          chat2.handleSubmit({ preventDefault: () => {} } as React.FormEvent<HTMLFormElement>);
-        }, 50);
-      }, 0);
+      chat2.append({ role: 'user', content: userInput });
     }
   };
 
@@ -301,7 +297,6 @@ export default function Home() {
     URL.revokeObjectURL(url);
   };
 
-  // ── Donda 色彩 tokens ──
   const D: Record<string, string> = {
     pageBg:       isDark ? "bg-[#0a0a0a]"       : "bg-[#ffffff]",
     sidebarBg:    isDark ? "bg-[#0f0f0f]"       : "bg-[#f5f5f5]",
@@ -333,7 +328,7 @@ export default function Home() {
     <div className={`flex h-screen ${D.pageBg} font-sans ${D.textPrimary} transition-colors duration-300`}
       style={{ fontFamily: "'Inter','Helvetica Neue',sans-serif", letterSpacing: "0.01em" }}>
 
-      {/* ── 左側：對話列表 ── */}
+      {/* 左側：對話列表 */}
       <div className={`${isSidebarOpen ? 'w-56' : 'w-0'} overflow-hidden transition-all duration-300 border-r ${D.border} ${D.sidebarBg} flex flex-col`}>
         <div className={`px-4 py-4 border-b ${D.border} flex items-center justify-between`}>
           <span className={`text-[10px] font-semibold tracking-[0.15em] uppercase ${D.textMuted}`}>Conversations</span>
@@ -359,7 +354,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ── 主區域 ── */}
+      {/* 主區域 */}
       <div className={`flex-1 flex flex-col h-full ${D.pageBg} min-w-0`}>
 
         {/* Header */}
@@ -381,7 +376,7 @@ export default function Home() {
                 compareMode
                   ? (isDark ? 'bg-[#f0f0f0] text-[#0a0a0a]' : 'bg-[#0a0a0a] text-[#f0f0f0]')
                   : `${D.hoverBg} ${D.textMuted}`
-              }`} title="Compare Models">
+              }`}>
               <Columns2 size={14} />
               <span className="hidden sm:inline">COMPARE</span>
             </button>
@@ -401,7 +396,7 @@ export default function Home() {
           </div>
         </header>
 
-        {/* ── 對話區 ── */}
+        {/* 對話區 */}
         {compareMode ? (
           <div className="flex-1 flex min-h-0">
             <div className={`flex-1 flex flex-col border-r ${D.border} min-w-0`}>
@@ -428,7 +423,7 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          <main className="flex-1 overflow-y-auto px-6 py-8 space-y-5">
+          <main ref={mainRef} className="flex-1 overflow-y-auto px-6 py-8 space-y-5">
             {chat1.messages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center space-y-5">
                 <div className={`text-[11px] tracking-[0.35em] uppercase ${D.textMuted}`}>DONDA</div>
@@ -463,7 +458,6 @@ export default function Home() {
                 </div>
               </div>
             )}
-            {/* 自動捲到底部錨點 */}
             <div ref={messagesEndRef} />
           </main>
         )}
@@ -476,27 +470,26 @@ export default function Home() {
               value={chat1.input}
               placeholder={compareMode ? "Send to both models..." : currentConversationId ? "Message..." : "Start a new conversation..."}
               onChange={chat1.handleInputChange}
-              disabled={chat1.isLoading}
+              disabled={chat1.isLoading || chat2.isLoading}
             />
-            <button type="submit" disabled={chat1.isLoading || !chat1.input.trim()}
+            <button type="submit" disabled={chat1.isLoading || chat2.isLoading || !chat1.input.trim()}
               className={`absolute right-2 p-2 rounded transition-colors disabled:opacity-30 ${D.sendBtn}`}>
               <Send size={14} />
             </button>
           </form>
           {compareMode && (
             <p className={`text-center text-[10px] tracking-[0.15em] uppercase mt-2 ${D.textMuted}`}>
-              Comparing {MODEL_OPTIONS.find(o => o.value === model)?.label} vs {MODEL_OPTIONS.find(o => o.value === model2)?.label}
+              {MODEL_OPTIONS.find(o => o.value === model)?.label} vs {MODEL_OPTIONS.find(o => o.value === model2)?.label}
             </p>
           )}
         </footer>
       </div>
 
-      {/* ── 右側：設定 ── */}
+      {/* 右側：設定 */}
       <div className={`overflow-hidden transition-all duration-300 border-l ${D.border} ${D.sidebarBg} flex flex-col`}
         style={{ width: isSettingsOpen ? '268px' : '0' }}>
         <div className="p-5 space-y-5 overflow-y-auto">
           <h2 className={`text-[10px] font-semibold tracking-[0.15em] uppercase ${D.textMuted}`}>Settings</h2>
-
           <div className="space-y-1.5">
             <label className={`text-[10px] tracking-wider uppercase ${D.textMuted}`}>Model</label>
             <select value={model} onChange={e => setModel(e.target.value)}
@@ -504,19 +497,17 @@ export default function Home() {
               {MODEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
-
           <div className="space-y-1.5">
             <label className={`text-[10px] tracking-wider uppercase ${D.textMuted}`}>System Prompt</label>
             <textarea value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)}
               placeholder="Define the AI's behavior..."
               className={`w-full p-2 text-[12px] border rounded h-24 resize-none focus:outline-none ${D.border} ${D.inputBg} ${D.textInput} ${D.placeholder}`} />
           </div>
-
           {[
-            { label: 'Temperature',     value: temperature,      setter: setTemperature,      min: 0,   max: 2,    step: 0.1  },
-            { label: 'Max Tokens',      value: maxTokens,        setter: setMaxTokens,        min: 100, max: 4096, step: 100  },
-            { label: 'Top P',           value: topP,             setter: setTopP,             min: 0,   max: 1,    step: 0.05 },
-            { label: 'Freq. Penalty',   value: frequencyPenalty, setter: setFrequencyPenalty, min: 0,   max: 2,    step: 0.1  },
+            { label: 'Temperature',   value: temperature,      setter: setTemperature,      min: 0,   max: 2,    step: 0.1  },
+            { label: 'Max Tokens',    value: maxTokens,        setter: setMaxTokens,        min: 100, max: 4096, step: 100  },
+            { label: 'Top P',         value: topP,             setter: setTopP,             min: 0,   max: 1,    step: 0.05 },
+            { label: 'Freq. Penalty', value: frequencyPenalty, setter: setFrequencyPenalty, min: 0,   max: 2,    step: 0.1  },
           ].map(({ label, value, setter, min, max, step }) => (
             <div key={label} className="space-y-1.5">
               <div className="flex justify-between">
