@@ -4,11 +4,13 @@ import { useChat } from "ai/react";
 import { useState, useEffect, useRef } from "react";
 import {
   Send, Settings2, User, Sparkles, SquarePen, MessageSquare,
-  Trash2, Moon, Sun, Copy, Check, Download, Columns2
+  Trash2, Moon, Sun, Copy, Check, Download, Columns2, Paperclip, X, ImageIcon
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 type Conversation = { id: string; title: string; created_at: string };
+const VISION_MODELS = ["meta-llama/llama-4-scout-17b-16e-instruct"];
+const estimateTokens = (text: string) => Math.ceil(text.length / 3.5);
 
 function MessageContent({ content, isDark }: { content: string; isDark: boolean }) {
   return (
@@ -65,6 +67,11 @@ function CompareMessage({ role, content, isDark, aiBubble, userBubble, textMuted
         </div>
         <div className={`relative group px-3 py-2 rounded text-[13px] leading-relaxed ${role === 'user' ? userBubble : aiBubble}`}>
           {role === 'user' ? <p>{content}</p> : <MessageContent content={content} isDark={isDark} />}
+          {role === 'assistant' && (
+            <div className={`text-[10px] mt-1.5 tracking-wider ${textMuted}`}>
+              ~{estimateTokens(content)} tokens
+            </div>
+          )}
           <CopyButton text={content} isDark={isDark} />
         </div>
       </div>
@@ -122,10 +129,11 @@ export default function Home() {
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [isDark, setIsDark] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
-
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesEndRef2 = useRef<HTMLDivElement>(null);
-  const mainRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("darkMode");
@@ -150,27 +158,17 @@ export default function Home() {
     },
   });
 
-  // chat2：Compare Mode 專用，用 append 直接加訊息
   const chat2 = useChat({
     api: "/api/chat",
     body: { model: model2, systemPrompt, temperature, maxTokens, topP, frequencyPenalty },
   });
 
-  // ── 自動捲到底部（用 setTimeout 確保 DOM 更新後才捲）──
   const scrollToBottom = (ref: React.RefObject<HTMLDivElement | null>) => {
-    setTimeout(() => {
-      ref.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    }, 50);
+    setTimeout(() => { ref.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, 50);
   };
 
-  useEffect(() => {
-    scrollToBottom(messagesEndRef);
-  }, [chat1.messages, chat1.isLoading]);
-
-  useEffect(() => {
-    scrollToBottom(messagesEndRef2);
-  }, [chat2.messages, chat2.isLoading]);
-
+  useEffect(() => { scrollToBottom(messagesEndRef); }, [chat1.messages, chat1.isLoading]);
+  useEffect(() => { scrollToBottom(messagesEndRef2); }, [chat2.messages, chat2.isLoading]);
   useEffect(() => { fetchConversations(); }, []);
 
   const fetchConversations = async () => {
@@ -185,8 +183,7 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
-          temperature: 0.3,
+          model: 'llama-3.1-8b-instant', temperature: 0.3,
           messages: [{ role: 'user', content: `根據以下訊息，用5個字以內取一個對話標題，只回傳標題文字，不要任何標點或說明：\n"${firstMessage}"` }],
         }),
       });
@@ -210,6 +207,24 @@ export default function Home() {
     } catch {}
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setImagePreview(result);
+      setImageBase64(result.split(',')[1]);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearImage = () => {
+    setImageBase64(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleNewChat = async () => {
     const res = await fetch('/api/conversations', {
       method: 'POST',
@@ -221,6 +236,7 @@ export default function Home() {
     setCurrentConversationId(newConv.id);
     chat1.setMessages([]);
     chat2.setMessages([]);
+    clearImage();
   };
 
   const handleSelectConversation = async (conv: Conversation) => {
@@ -230,6 +246,7 @@ export default function Home() {
     const msgs = Array.isArray(data) ? data : [];
     chat1.setMessages(msgs.map((m: any) => ({ id: m.id, role: m.role, content: m.content })));
     chat2.setMessages([]);
+    clearImage();
   };
 
   const handleDeleteConversation = async (e: React.MouseEvent, id: string) => {
@@ -249,7 +266,7 @@ export default function Home() {
 
   const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!chat1.input.trim()) return;
+    if (!chat1.input.trim() && !imageBase64) return;
     const userInput = chat1.input;
     let convId = currentConversationId;
     const isFirstMessage = chat1.messages.length === 0;
@@ -269,15 +286,65 @@ export default function Home() {
     await fetch('/api/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversation_id: convId, role: 'user', content: userInput }),
+      body: JSON.stringify({ conversation_id: convId, role: 'user', content: userInput || '[圖片]' }),
     });
 
-    if (isFirstMessage && convId) autoGenerateTitle(convId, userInput);
+    if (isFirstMessage && convId) autoGenerateTitle(convId, userInput || '圖片分析');
 
-    // 送給 chat1
-    chat1.handleSubmit(e);
+    if (imageBase64) {
+      // Vision：直接用 fetch 送含圖片的請求
+      const currentImageBase64 = imageBase64;
+      clearImage();
+      chat1.setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        role: 'user',
+        content: userInput || '請描述這張圖片。',
+      }]);
+      chat1.setInput('');
+      // 觸發 API
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          systemPrompt,
+          temperature,
+          maxTokens,
+          topP,
+          frequencyPenalty,
+          messages: [
+            ...chat1.messages.map(m => ({ role: m.role, content: m.content })),
+            {
+              role: 'user',
+              content: userInput || '請描述這張圖片。',
+              imageBase64: currentImageBase64,
+            },
+          ],
+        }),
+      });
+      // 讀取 stream
+      const reader = res.body?.getReader();
+      if (!reader) return;
+      let aiResponse = '';
+      const aiId = (Date.now() + 1).toString();
+      chat1.setMessages(prev => [...prev, { id: aiId, role: 'assistant', content: '' }]);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = new TextDecoder().decode(value);
+        const lines = chunk.split('\n').filter(l => l.startsWith('0:"'));
+        for (const line of lines) {
+          try {
+            const text = JSON.parse(line.slice(2));
+            aiResponse += text;
+            chat1.setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: aiResponse } : m));
+          } catch {}
+        }
+      }
+    } else {
+      chat1.handleSubmit(e);
+    }
 
-    // ── Compare Mode：用 append 直接送給 chat2，不依賴 input state ──
     if (compareMode) {
       chat2.append({ role: 'user', content: userInput });
     }
@@ -296,6 +363,8 @@ export default function Home() {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const totalTokens = chat1.messages.reduce((acc, m) => acc + estimateTokens(m.content), 0);
 
   const D: Record<string, string> = {
     pageBg:       isDark ? "bg-[#0a0a0a]"       : "bg-[#ffffff]",
@@ -321,14 +390,16 @@ export default function Home() {
     { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B" },
     { value: "llama-3.1-8b-instant",    label: "Llama 3.1 8B" },
     { value: "qwen-qwq-32b",            label: "Qwen QwQ 32B" },
-    { value: "meta-llama/llama-4-scout-17b-16e-instruct", label: "Llama 4 Scout 17B" },
+    { value: "meta-llama/llama-4-scout-17b-16e-instruct", label: "Llama 4 Scout 17B 👁" },
   ];
+
+  const isVisionModel = VISION_MODELS.includes(model);
 
   return (
     <div className={`flex h-screen ${D.pageBg} font-sans ${D.textPrimary} transition-colors duration-300`}
       style={{ fontFamily: "'Inter','Helvetica Neue',sans-serif", letterSpacing: "0.01em" }}>
 
-      {/* 左側：對話列表 */}
+      {/* 左側 */}
       <div className={`${isSidebarOpen ? 'w-56' : 'w-0'} overflow-hidden transition-all duration-300 border-r ${D.border} ${D.sidebarBg} flex flex-col`}>
         <div className={`px-4 py-4 border-b ${D.border} flex items-center justify-between`}>
           <span className={`text-[10px] font-semibold tracking-[0.15em] uppercase ${D.textMuted}`}>Conversations</span>
@@ -356,8 +427,6 @@ export default function Home() {
 
       {/* 主區域 */}
       <div className={`flex-1 flex flex-col h-full ${D.pageBg} min-w-0`}>
-
-        {/* Header */}
         <header className={`border-b ${D.border} flex items-center justify-between px-5 ${D.headerBg} backdrop-blur-sm`} style={{ height: '52px' }}>
           <div className="flex items-center gap-2">
             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -382,7 +451,7 @@ export default function Home() {
             </button>
             {chat1.messages.length > 0 && (
               <button onClick={handleExport}
-                className={`p-1.5 ${D.hoverBg} rounded transition-colors ${D.textMuted}`} title="匯出 .md">
+                className={`p-1.5 ${D.hoverBg} rounded transition-colors ${D.textMuted}`}>
                 <Download size={15} />
               </button>
             )}
@@ -396,7 +465,6 @@ export default function Home() {
           </div>
         </header>
 
-        {/* 對話區 */}
         {compareMode ? (
           <div className="flex-1 flex min-h-0">
             <div className={`flex-1 flex flex-col border-r ${D.border} min-w-0`}>
@@ -423,7 +491,7 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          <main ref={mainRef} className="flex-1 overflow-y-auto px-6 py-8 space-y-5">
+          <main className="flex-1 overflow-y-auto px-6 py-8 space-y-5">
             {chat1.messages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center space-y-5">
                 <div className={`text-[11px] tracking-[0.35em] uppercase ${D.textMuted}`}>DONDA</div>
@@ -440,6 +508,11 @@ export default function Home() {
                     m.role === 'user' ? D.userBubble : D.aiBubble
                   }`}>
                     {m.role === 'user' ? <p>{m.content}</p> : <MessageContent content={m.content} isDark={isDark} />}
+                    {m.role === 'assistant' && (
+                      <div className={`text-[10px] mt-2 tracking-wider ${D.textMuted}`}>
+                        {m.content.length} chars · ~{estimateTokens(m.content)} tokens
+                      </div>
+                    )}
                     <CopyButton text={m.content} isDark={isDark} />
                   </div>
                 </div>
@@ -462,20 +535,49 @@ export default function Home() {
           </main>
         )}
 
-        {/* 輸入框 */}
         <footer className={`px-5 pb-5 pt-2 bg-gradient-to-t ${D.footerGrad} to-transparent`}>
-          <form onSubmit={handleFormSubmit} className="max-w-3xl mx-auto relative flex items-center">
-            <input
-              className={`w-full py-3 pl-5 pr-12 rounded border ${D.border} ${D.inputBg} ${D.textInput} ${D.placeholder} text-[14px] tracking-wide focus:outline-none transition-all`}
-              value={chat1.input}
-              placeholder={compareMode ? "Send to both models..." : currentConversationId ? "Message..." : "Start a new conversation..."}
-              onChange={chat1.handleInputChange}
-              disabled={chat1.isLoading || chat2.isLoading}
-            />
-            <button type="submit" disabled={chat1.isLoading || chat2.isLoading || !chat1.input.trim()}
-              className={`absolute right-2 p-2 rounded transition-colors disabled:opacity-30 ${D.sendBtn}`}>
-              <Send size={14} />
+          {chat1.messages.length > 0 && (
+            <p className={`text-center text-[10px] tracking-[0.1em] uppercase mb-2 ${D.textMuted}`}>
+              ~{totalTokens} tokens used this conversation
+            </p>
+          )}
+          {imagePreview && (
+            <div className="max-w-3xl mx-auto mb-2 flex items-center gap-2">
+              <div className="relative">
+                <img src={imagePreview} alt="preview"
+                  className={`h-14 w-14 object-cover rounded border ${D.border}`} />
+                <button onClick={clearImage}
+                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center">
+                  <X size={10} />
+                </button>
+              </div>
+              <span className={`text-[11px] ${D.textMuted} flex items-center gap-1`}>
+                <ImageIcon size={11} />
+                {isVisionModel ? 'Ready to send' : 'Switch to Llama 4 Scout 👁 for vision'}
+              </span>
+            </div>
+          )}
+          <form onSubmit={handleFormSubmit} className="max-w-3xl mx-auto flex items-center gap-2">
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+            <button type="button" onClick={() => fileInputRef.current?.click()}
+              className={`p-2.5 rounded border ${D.border} ${D.inputBg} ${D.hoverBg} ${D.textMuted} transition-colors shrink-0`}
+              title="上傳圖片">
+              <Paperclip size={15} />
             </button>
+            <div className="relative flex-1">
+              <input
+                className={`w-full py-3 pl-5 pr-12 rounded border ${D.border} ${D.inputBg} ${D.textInput} ${D.placeholder} text-[14px] tracking-wide focus:outline-none transition-all`}
+                value={chat1.input}
+                placeholder={imageBase64 ? "Add a message or just send..." : compareMode ? "Send to both models..." : currentConversationId ? "Message..." : "Start a new conversation..."}
+                onChange={chat1.handleInputChange}
+                disabled={chat1.isLoading || chat2.isLoading}
+              />
+              <button type="submit"
+                disabled={chat1.isLoading || chat2.isLoading || (!chat1.input.trim() && !imageBase64)}
+                className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded transition-colors disabled:opacity-30 ${D.sendBtn}`}>
+                <Send size={14} />
+              </button>
+            </div>
           </form>
           {compareMode && (
             <p className={`text-center text-[10px] tracking-[0.15em] uppercase mt-2 ${D.textMuted}`}>
@@ -496,6 +598,11 @@ export default function Home() {
               className={`w-full p-2 text-[12px] border rounded ${D.border} ${D.inputBg} ${D.textInput} focus:outline-none`}>
               {MODEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+            {isVisionModel && (
+              <p className={`text-[10px] ${D.textMuted} flex items-center gap-1`}>
+                <ImageIcon size={10} /> Vision enabled
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <label className={`text-[10px] tracking-wider uppercase ${D.textMuted}`}>System Prompt</label>
