@@ -20,20 +20,14 @@ export async function POST(req: Request) {
       frequencyPenalty,
     } = await req.json();
 
-    // Vision 支援：把 imageBase64 轉成 multimodal content
+    // Vision：把 imageBase64 轉成 multimodal content
     const processedMessages = messages.map((m: any) => {
       if (m.imageBase64 && m.role === 'user') {
         return {
           role: 'user',
           content: [
-            {
-              type: 'image',
-              image: m.imageBase64,
-            },
-            {
-              type: 'text',
-              text: m.content || '請描述這張圖片。',
-            },
+            { type: 'image', image: m.imageBase64 },
+            { type: 'text', text: m.content || '請描述這張圖片。' },
           ],
         };
       }
