@@ -1,59 +1,42 @@
-import { createOpenAI } from '@ai-sdk/openai';
-import { streamText, CoreMessage } from 'ai';
+import { supabase } from '@/lib/supabase';
+import { NextResponse } from 'next/server';
 
-export const maxDuration = 30;
-
-const groq = createOpenAI({
-  baseURL: 'https://api.groq.com/openai/v1',
-  apiKey: process.env.GROQ_API_KEY || '',
-});
+export async function GET() {
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
+}
 
 export async function POST(req: Request) {
-  try {
-    const {
-      messages,
-      model,
-      temperature,
-      systemPrompt,
-      maxTokens,
-      topP,
-      frequencyPenalty,
-    } = await req.json();
+  const { title } = await req.json();
+  const { data, error } = await supabase
+    .from('conversations')
+    .insert({ title: title || '新對話' })
+    .select()
+    .single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
+}
 
-    // Vision：把 imageBase64 轉成 multimodal content
-    const processedMessages = messages.map((m: any) => {
-      if (m.imageBase64 && m.role === 'user') {
-        return {
-          role: 'user',
-          content: [
-            { type: 'image', image: m.imageBase64 },
-            { type: 'text', text: m.content || '請描述這張圖片。' },
-          ],
-        };
-      }
-      return m;
-    });
+export async function PATCH(req: Request) {
+  const { id, title } = await req.json();
+  const { error } = await supabase
+    .from('conversations')
+    .update({ title })
+    .eq('id', id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}
 
-    const fullMessages: CoreMessage[] = systemPrompt
-      ? [{ role: 'system', content: systemPrompt }, ...processedMessages]
-      : processedMessages;
-
-    const result = await streamText({
-      model: groq(model || 'llama-3.1-8b-instant'),
-      messages: fullMessages,
-      temperature: Number(temperature) || 0.7,
-      maxTokens: Number(maxTokens) || 1024,
-      topP: Number(topP) || 1,
-      frequencyPenalty: Number(frequencyPenalty) || 0,
-    });
-
-    return result.toDataStreamResponse();
-
-  } catch (error) {
-    console.error("API 發生錯誤:", error);
-    return new Response(JSON.stringify({ error: "伺服器處理請求時發生錯誤" }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+export async function DELETE(req: Request) {
+  const { id } = await req.json();
+  const { error } = await supabase
+    .from('conversations')
+    .delete()
+    .eq('id', id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
 }
