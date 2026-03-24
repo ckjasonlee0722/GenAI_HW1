@@ -10,17 +10,8 @@ const groq = createOpenAI({
 
 export async function POST(req: Request) {
   try {
-    const {
-      messages,
-      model,
-      temperature,
-      systemPrompt,
-      maxTokens,
-      topP,
-      frequencyPenalty,
-    } = await req.json();
+    const { messages, model, temperature, systemPrompt, maxTokens, topP, frequencyPenalty } = await req.json();
 
-    // Vision：把 imageBase64 轉成 multimodal content
     const processedMessages = messages.map((m: any) => {
       if (m.imageBase64 && m.role === 'user') {
         return {
@@ -47,7 +38,15 @@ export async function POST(req: Request) {
       frequencyPenalty: Number(frequencyPenalty) || 0,
     });
 
-    return result.toDataStreamResponse();
+    const streamResponse = result.toDataStreamResponse();
+    const headers = new Headers(streamResponse.headers);
+    headers.set('Cache-Control', 'no-cache');
+    headers.set('Connection', 'keep-alive');
+    headers.set('X-Accel-Buffering', 'no');
+    return new Response(streamResponse.body, {
+      status: streamResponse.status,
+      headers,
+    });
 
   } catch (error) {
     console.error("API 發生錯誤:", error);
