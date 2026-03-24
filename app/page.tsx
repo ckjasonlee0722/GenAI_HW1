@@ -7,6 +7,8 @@ import {
   Trash2, Moon, Sun, Copy, Check, Download, Columns2, Paperclip, X, ImageIcon
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 type Conversation = { id: string; title: string; created_at: string };
 const VISION_MODELS = ["meta-llama/llama-4-scout-17b-16e-instruct"];
@@ -16,17 +18,27 @@ function MessageContent({ content, isDark }: { content: string; isDark: boolean 
   return (
     <ReactMarkdown components={{
       code({ className, children, ...props }: any) {
-        const isBlock = className?.includes("language-");
-        if (isBlock) return (
-          <pre className={`my-3 p-4 rounded text-sm overflow-x-auto font-mono ${
-            isDark ? "bg-neutral-900 text-neutral-200 border border-neutral-700"
-                   : "bg-neutral-100 text-neutral-800 border border-neutral-200"
-          }`}><code>{children}</code></pre>
-        );
-        return <code className={`px-1.5 py-0.5 rounded text-sm font-mono ${
-          isDark ? "bg-neutral-900 text-neutral-200" : "bg-neutral-100 text-neutral-700"
-        }`} {...props}>{children}</code>;
-      },
+      const isBlock = className?.includes("language-");
+      const language = className?.replace("language-", "") || "text";
+      if (isBlock) return (
+        <SyntaxHighlighter
+          language={language}
+          style={isDark ? oneDark : oneLight}
+          customStyle={{
+            margin: '12px 0',
+            borderRadius: '6px',
+            fontSize: '13px',
+            border: isDark ? '1px solid #1f1f1f' : '1px solid #e5e5e5',
+          }}
+          PreTag="div"
+        >
+          {String(children).replace(/\n$/, '')}
+        </SyntaxHighlighter>
+      );
+      return <code className={`px-1.5 py-0.5 rounded text-sm font-mono ${
+        isDark ? "bg-neutral-900 text-neutral-200" : "bg-neutral-100 text-neutral-700"
+      }`} {...props}>{children}</code>;
+    },
       strong({ children }) { return <strong className="font-bold">{children}</strong>; },
       ul({ children }) { return <ul className="list-disc list-inside my-2 space-y-1">{children}</ul>; },
       ol({ children }) { return <ol className="list-decimal list-inside my-2 space-y-1">{children}</ol>; },
