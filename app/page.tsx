@@ -317,6 +317,7 @@ export default function Home() {
     if (imageBase64) {
       const currentImageBase64 = imageBase64;
       const currentInput = userInput;
+      const currentPreview = imagePreview;  // ← 加這行，在 clearImage 之前
       clearImage();
       chat1.setInput('');
 
@@ -326,6 +327,7 @@ export default function Home() {
         id: userMsgId,
         role: 'user',
         content: currentInput || '請描述這張圖片。',
+        imagePreview: currentPreview,  // ← 加這行
       }]);
 
       // 直接呼叫 API 送圖片
@@ -524,7 +526,15 @@ export default function Home() {
                   <div className={`relative group px-4 py-3 rounded text-[14px] leading-relaxed ${
                     m.role === 'user' ? D.userBubble : D.aiBubble
                   }`}>
-                    {m.role === 'user' ? <p>{m.content}</p> : <MessageContent content={m.content} isDark={isDark} />}
+                    {m.role === 'user' ? (
+                      <div>
+                        {(m as any).imagePreview && (
+                          <img src={(m as any).imagePreview} alt="uploaded"
+                            className="max-w-[240px] max-h-[240px] rounded mb-2 object-cover" />
+                        )}
+                        {m.content && <p>{m.content}</p>}
+                      </div>
+                    ) : <MessageContent content={m.content} isDark={isDark} />}
                     {m.role === 'assistant' && (
                       <div className={`text-[10px] mt-2 tracking-wider ${D.textMuted}`}>
                         {m.content.length} chars · ~{estimateTokens(m.content)} tokens
