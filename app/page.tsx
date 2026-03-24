@@ -13,32 +13,28 @@ type Conversation = { id: string; title: string; created_at: string };
 // ── Markdown 渲染 ──
 function MessageContent({ content, isDark }: { content: string; isDark: boolean }) {
   return (
-    <ReactMarkdown
-      components={{
-        code({ className, children, ...props }: any) {
-          const isBlock = className?.includes("language-");
-          if (isBlock) {
-            return (
-              <pre className={`my-3 p-4 rounded text-sm overflow-x-auto font-mono ${
-                isDark ? "bg-neutral-900 text-neutral-200 border border-neutral-700"
-                       : "bg-neutral-100 text-neutral-800 border border-neutral-200"
-              }`}><code>{children}</code></pre>
-            );
-          }
-          return <code className={`px-1.5 py-0.5 rounded text-sm font-mono ${
-            isDark ? "bg-neutral-900 text-neutral-200" : "bg-neutral-100 text-neutral-700"
-          }`} {...props}>{children}</code>;
-        },
-        strong({ children }) { return <strong className="font-bold">{children}</strong>; },
-        ul({ children }) { return <ul className="list-disc list-inside my-2 space-y-1">{children}</ul>; },
-        ol({ children }) { return <ol className="list-decimal list-inside my-2 space-y-1">{children}</ol>; },
-        li({ children }) { return <li className="text-[14px]">{children}</li>; },
-        p({ children }) { return <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>; },
-        h1({ children }) { return <h1 className="text-xl font-bold mt-4 mb-2">{children}</h1>; },
-        h2({ children }) { return <h2 className="text-lg font-bold mt-3 mb-2">{children}</h2>; },
-        h3({ children }) { return <h3 className="text-base font-bold mt-2 mb-1">{children}</h3>; },
-      }}
-    >{content}</ReactMarkdown>
+    <ReactMarkdown components={{
+      code({ className, children, ...props }: any) {
+        const isBlock = className?.includes("language-");
+        if (isBlock) return (
+          <pre className={`my-3 p-4 rounded text-sm overflow-x-auto font-mono ${
+            isDark ? "bg-neutral-900 text-neutral-200 border border-neutral-700"
+                   : "bg-neutral-100 text-neutral-800 border border-neutral-200"
+          }`}><code>{children}</code></pre>
+        );
+        return <code className={`px-1.5 py-0.5 rounded text-sm font-mono ${
+          isDark ? "bg-neutral-900 text-neutral-200" : "bg-neutral-100 text-neutral-700"
+        }`} {...props}>{children}</code>;
+      },
+      strong({ children }) { return <strong className="font-bold">{children}</strong>; },
+      ul({ children }) { return <ul className="list-disc list-inside my-2 space-y-1">{children}</ul>; },
+      ol({ children }) { return <ol className="list-decimal list-inside my-2 space-y-1">{children}</ol>; },
+      li({ children }) { return <li className="text-[14px]">{children}</li>; },
+      p({ children }) { return <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>; },
+      h1({ children }) { return <h1 className="text-xl font-bold mt-4 mb-2">{children}</h1>; },
+      h2({ children }) { return <h2 className="text-lg font-bold mt-3 mb-2">{children}</h2>; },
+      h3({ children }) { return <h3 className="text-base font-bold mt-2 mb-1">{children}</h3>; },
+    }}>{content}</ReactMarkdown>
   );
 }
 
@@ -50,19 +46,20 @@ function CopyButton({ text, isDark }: { text: string; isDark: boolean }) {
       await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    }}
-      className={`absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 transition-all ${
-        isDark ? "bg-neutral-700 hover:bg-neutral-600 text-neutral-400"
-               : "bg-neutral-200 hover:bg-neutral-300 text-neutral-500"
-      }`} title="複製">
+    }} className={`absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 transition-all ${
+      isDark ? "bg-neutral-700 hover:bg-neutral-600 text-neutral-400"
+             : "bg-neutral-200 hover:bg-neutral-300 text-neutral-500"
+    }`} title="複製">
       {copied ? <Check size={12} /> : <Copy size={12} />}
     </button>
   );
 }
 
-// ── 雙 Model 單側對話泡泡 ──
-function CompareMessage({ role, content, isDark, aiBubble, userBubble, textMuted, cardBg, border }:
-  { role: string; content: string; isDark: boolean; aiBubble: string; userBubble: string; textMuted: string; cardBg: string; border: string }) {
+// ── Compare Mode 單則訊息 ──
+function CompareMessage({ role, content, isDark, aiBubble, userBubble, textMuted, cardBg, border }: {
+  role: string; content: string; isDark: boolean;
+  aiBubble: string; userBubble: string; textMuted: string; cardBg: string; border: string;
+}) {
   return (
     <div className={`flex ${role === 'user' ? 'justify-end' : 'justify-start'}`}>
       <div className={`flex gap-2 max-w-[90%] ${role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -78,7 +75,49 @@ function CompareMessage({ role, content, isDark, aiBubble, userBubble, textMuted
   );
 }
 
+// ── Compare Mode 訊息列表（移到 Home 外部，ref 才能正常運作）──
+type MessageListProps = {
+  messages: any[];
+  isLoading: boolean;
+  endRef: React.RefObject<HTMLDivElement | null>;
+  isDark: boolean;
+  D: Record<string, string>;
+};
+
+function MessageList({ messages, isLoading, endRef, isDark, D }: MessageListProps) {
+  return (
+    <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+      {messages.length === 0 ? (
+        <div className="h-full flex flex-col items-center justify-center">
+          <p className={`text-[10px] tracking-[0.3em] uppercase ${D.textMuted}`}>WAITING</p>
+        </div>
+      ) : messages.map(m => (
+        <CompareMessage key={m.id} role={m.role} content={m.content} isDark={isDark}
+          aiBubble={D.aiBubble} userBubble={D.userBubble} textMuted={D.textMuted}
+          cardBg={D.cardBg} border={D.border} />
+      ))}
+      {isLoading && (
+        <div className="flex justify-start gap-2">
+          <div className={`w-6 h-6 rounded flex items-center justify-center border ${D.border} ${D.cardBg}`}>
+            <Sparkles size={11} className={`${D.textMuted} animate-pulse`} />
+          </div>
+          <div className={`flex items-center gap-1 px-3 py-2 rounded ${D.aiBubble}`}>
+            {[0, 150, 300].map(delay => (
+              <span key={delay} className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#555]' : 'bg-[#ccc]'} animate-bounce`}
+                style={{ animationDelay: `${delay}ms` }} />
+            ))}
+          </div>
+        </div>
+      )}
+      <div ref={endRef} />
+    </div>
+  );
+}
+
+// ════════════════════════════════════════
 export default function Home() {
+// ════════════════════════════════════════
+
   const [model, setModel] = useState("llama-3.1-8b-instant");
   const [model2, setModel2] = useState("llama-3.3-70b-versatile");
   const [systemPrompt, setSystemPrompt] = useState("");
@@ -106,7 +145,6 @@ export default function Home() {
     return !prev;
   });
 
-  // ── Chat hook 1 ──
   const chat1 = useChat({
     api: "/api/chat",
     body: { model, systemPrompt, temperature, maxTokens, topP, frequencyPenalty },
@@ -120,14 +158,20 @@ export default function Home() {
     },
   });
 
-  // ── Chat hook 2（Compare Mode 用）──
   const chat2 = useChat({
     api: "/api/chat",
     body: { model: model2, systemPrompt, temperature, maxTokens, topP, frequencyPenalty },
   });
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat1.messages, chat1.isLoading]);
-  useEffect(() => { messagesEndRef2.current?.scrollIntoView({ behavior: "smooth" }); }, [chat2.messages, chat2.isLoading]);
+  // ── 自動捲到底部 ──
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chat1.messages, chat1.isLoading]);
+
+  useEffect(() => {
+    messagesEndRef2.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chat2.messages, chat2.isLoading]);
+
   useEffect(() => { fetchConversations(); }, []);
 
   const fetchConversations = async () => {
@@ -136,7 +180,6 @@ export default function Home() {
     setConversations(Array.isArray(data) ? data : []);
   };
 
-  // ── 自動生成標題 ──
   const autoGenerateTitle = async (convId: string, firstMessage: string) => {
     try {
       const res = await fetch('/api/chat', {
@@ -145,10 +188,7 @@ export default function Home() {
         body: JSON.stringify({
           model: 'llama-3.1-8b-instant',
           temperature: 0.3,
-          messages: [{
-            role: 'user',
-            content: `根據以下訊息，用5個字以內取一個對話標題，只回傳標題文字，不要任何標點或說明：\n"${firstMessage}"`
-          }],
+          messages: [{ role: 'user', content: `根據以下訊息，用5個字以內取一個對話標題，只回傳標題文字，不要任何標點或說明：\n"${firstMessage}"` }],
         }),
       });
       const reader = res.body?.getReader();
@@ -159,12 +199,9 @@ export default function Home() {
         if (done) break;
         raw += new TextDecoder().decode(value);
       }
-      // 從 stream data 取出文字
       const lines = raw.split('\n').filter(l => l.startsWith('0:"'));
-      const title = lines.map(l => {
-        try { return JSON.parse(l.slice(2)); } catch { return ''; }
-      }).join('').trim().slice(0, 20) || firstMessage.slice(0, 15);
-
+      const title = lines.map(l => { try { return JSON.parse(l.slice(2)); } catch { return ''; } })
+        .join('').trim().slice(0, 20) || firstMessage.slice(0, 15);
       await fetch('/api/conversations', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -204,7 +241,11 @@ export default function Home() {
       body: JSON.stringify({ id }),
     });
     setConversations(prev => prev.filter(c => c.id !== id));
-    if (currentConversationId === id) { setCurrentConversationId(null); chat1.setMessages([]); chat2.setMessages([]); }
+    if (currentConversationId === id) {
+      setCurrentConversationId(null);
+      chat1.setMessages([]);
+      chat2.setMessages([]);
+    }
   };
 
   const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -232,29 +273,26 @@ export default function Home() {
       body: JSON.stringify({ conversation_id: convId, role: 'user', content: userInput }),
     });
 
-    // 自動生成標題（只在第一則訊息時）
     if (isFirstMessage && convId) autoGenerateTitle(convId, userInput);
 
     chat1.handleSubmit(e);
 
-    // Compare Mode：同時送給 model2
     if (compareMode) {
       setTimeout(() => {
-        const fakeEvent = { preventDefault: () => {} } as React.FormEvent<HTMLFormElement>;
         chat2.setInput(userInput);
-        setTimeout(() => chat2.handleSubmit(fakeEvent), 50);
+        setTimeout(() => {
+          chat2.handleSubmit({ preventDefault: () => {} } as React.FormEvent<HTMLFormElement>);
+        }, 50);
       }, 0);
     }
   };
 
-  // ── 匯出 .md ──
   const handleExport = () => {
     const title = conversations.find(c => c.id === currentConversationId)?.title || 'conversation';
     const content = chat1.messages.map(m =>
       `## ${m.role === 'user' ? 'You' : 'AI'}\n\n${m.content}\n`
     ).join('\n---\n\n');
-    const md = `# ${title}\n\n${content}`;
-    const blob = new Blob([md], { type: 'text/markdown' });
+    const blob = new Blob([`# ${title}\n\n${content}`], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -264,71 +302,38 @@ export default function Home() {
   };
 
   // ── Donda 色彩 tokens ──
-  const D = {
-    pageBg:      isDark ? "bg-[#0a0a0a]"    : "bg-[#ffffff]",
-    sidebarBg:   isDark ? "bg-[#0f0f0f]"    : "bg-[#f5f5f5]",
-    cardBg:      isDark ? "bg-[#141414]"     : "bg-[#ffffff]",
-    headerBg:    isDark ? "bg-[#0a0a0a]/90" : "bg-[#ffffff]/90",
-    inputBg:     isDark ? "bg-[#141414]"     : "bg-[#f5f5f5]",
-    footerGrad:  isDark ? "from-[#0a0a0a]"  : "from-[#ffffff]",
-    border:      isDark ? "border-[#1f1f1f]" : "border-[#e5e5e5]",
-    textPrimary: isDark ? "text-[#f0f0f0]"  : "text-[#0a0a0a]",
-    textMuted:   isDark ? "text-[#555555]"  : "text-[#999999]",
-    textInput:   isDark ? "text-[#e0e0e0]"  : "text-[#0a0a0a]",
-    hoverBg:     isDark ? "hover:bg-[#1a1a1a]" : "hover:bg-[#eeeeee]",
-    activeItem:  isDark ? "bg-[#1a1a1a] text-[#f0f0f0]" : "bg-[#eeeeee] text-[#0a0a0a]",
-    inactiveItem:isDark ? "text-[#555555] hover:bg-[#141414]" : "text-[#999999] hover:bg-[#f5f5f5]",
-    userBubble:  isDark ? "bg-[#f0f0f0] text-[#0a0a0a]" : "bg-[#0a0a0a] text-[#f0f0f0]",
-    aiBubble:    isDark ? "bg-[#141414] text-[#e0e0e0] border border-[#1f1f1f]" : "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]",
-    sendBtn:     isDark ? "bg-[#f0f0f0] text-[#0a0a0a] hover:bg-white" : "bg-[#0a0a0a] text-[#f0f0f0] hover:bg-[#222]",
-    placeholder: isDark ? "placeholder:text-[#444444]" : "placeholder:text-[#bbbbbb]",
+  const D: Record<string, string> = {
+    pageBg:       isDark ? "bg-[#0a0a0a]"       : "bg-[#ffffff]",
+    sidebarBg:    isDark ? "bg-[#0f0f0f]"       : "bg-[#f5f5f5]",
+    cardBg:       isDark ? "bg-[#141414]"        : "bg-[#ffffff]",
+    headerBg:     isDark ? "bg-[#0a0a0a]/90"    : "bg-[#ffffff]/90",
+    inputBg:      isDark ? "bg-[#141414]"        : "bg-[#f5f5f5]",
+    footerGrad:   isDark ? "from-[#0a0a0a]"     : "from-[#ffffff]",
+    border:       isDark ? "border-[#1f1f1f]"   : "border-[#e5e5e5]",
+    textPrimary:  isDark ? "text-[#f0f0f0]"     : "text-[#0a0a0a]",
+    textMuted:    isDark ? "text-[#555555]"     : "text-[#999999]",
+    textInput:    isDark ? "text-[#e0e0e0]"     : "text-[#0a0a0a]",
+    hoverBg:      isDark ? "hover:bg-[#1a1a1a]" : "hover:bg-[#eeeeee]",
+    activeItem:   isDark ? "bg-[#1a1a1a] text-[#f0f0f0]" : "bg-[#eeeeee] text-[#0a0a0a]",
+    inactiveItem: isDark ? "text-[#555555] hover:bg-[#141414]" : "text-[#999999] hover:bg-[#f5f5f5]",
+    userBubble:   isDark ? "bg-[#f0f0f0] text-[#0a0a0a]" : "bg-[#0a0a0a] text-[#f0f0f0]",
+    aiBubble:     isDark ? "bg-[#141414] text-[#e0e0e0] border border-[#1f1f1f]" : "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]",
+    sendBtn:      isDark ? "bg-[#f0f0f0] text-[#0a0a0a] hover:bg-white" : "bg-[#0a0a0a] text-[#f0f0f0] hover:bg-[#222]",
+    placeholder:  isDark ? "placeholder:text-[#444444]" : "placeholder:text-[#bbbbbb]",
   };
 
   const MODEL_OPTIONS = [
     { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B" },
-    { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B" },
-    { value: "qwen-qwq-32b", label: "Qwen QwQ 32B" },
+    { value: "llama-3.1-8b-instant",    label: "Llama 3.1 8B" },
+    { value: "qwen-qwq-32b",            label: "Qwen QwQ 32B" },
     { value: "meta-llama/llama-4-scout-17b-16e-instruct", label: "Llama 4 Scout 17B" },
   ];
-
-  // ── 單側訊息列表 ──
-  const MessageList = ({ messages, isLoading, endRef }: { messages: any[]; isLoading: boolean; endRef: React.RefObject<HTMLDivElement> }) => (
-    <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-      {messages.length === 0 ? (
-        <div className="h-full flex flex-col items-center justify-center space-y-4">
-          <div className={`text-[10px] tracking-[0.3em] uppercase ${D.textMuted}`}>WAITING</div>
-        </div>
-      ) : (
-        messages.map(m => (
-          <CompareMessage key={m.id} role={m.role} content={m.content} isDark={isDark}
-            aiBubble={D.aiBubble} userBubble={D.userBubble} textMuted={D.textMuted}
-            cardBg={D.cardBg} border={D.border} />
-        ))
-      )}
-      {isLoading && (
-        <div className="flex justify-start">
-          <div className={`flex gap-2`}>
-            <div className={`w-6 h-6 rounded flex items-center justify-center border ${D.border} ${D.cardBg}`}>
-              <Sparkles size={11} className={`${D.textMuted} animate-pulse`} />
-            </div>
-            <div className={`flex items-center gap-1 px-3 py-2 rounded ${D.aiBubble}`}>
-              {[0, 150, 300].map(delay => (
-                <span key={delay} className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#555]' : 'bg-[#ccc]'} animate-bounce`}
-                  style={{ animationDelay: `${delay}ms` }} />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-      <div ref={endRef} />
-    </div>
-  );
 
   return (
     <div className={`flex h-screen ${D.pageBg} font-sans ${D.textPrimary} transition-colors duration-300`}
       style={{ fontFamily: "'Inter','Helvetica Neue',sans-serif", letterSpacing: "0.01em" }}>
 
-      {/* 左側：對話列表 */}
+      {/* ── 左側：對話列表 ── */}
       <div className={`${isSidebarOpen ? 'w-56' : 'w-0'} overflow-hidden transition-all duration-300 border-r ${D.border} ${D.sidebarBg} flex flex-col`}>
         <div className={`px-4 py-4 border-b ${D.border} flex items-center justify-between`}>
           <span className={`text-[10px] font-semibold tracking-[0.15em] uppercase ${D.textMuted}`}>Conversations</span>
@@ -354,11 +359,11 @@ export default function Home() {
         </div>
       </div>
 
-      {/* 主區域 */}
+      {/* ── 主區域 ── */}
       <div className={`flex-1 flex flex-col h-full ${D.pageBg} min-w-0`}>
 
         {/* Header */}
-        <header className={`h-13 border-b ${D.border} flex items-center justify-between px-5 ${D.headerBg} backdrop-blur-sm`} style={{ height: '52px' }}>
+        <header className={`border-b ${D.border} flex items-center justify-between px-5 ${D.headerBg} backdrop-blur-sm`} style={{ height: '52px' }}>
           <div className="flex items-center gap-2">
             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               className={`p-1.5 ${D.hoverBg} rounded transition-colors ${D.textMuted}`}>
@@ -371,7 +376,6 @@ export default function Home() {
             </span>
           </div>
           <div className="flex items-center gap-1">
-            {/* Compare Mode 開關 */}
             <button onClick={() => setCompareMode(!compareMode)}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] tracking-wider transition-colors ${
                 compareMode
@@ -381,15 +385,13 @@ export default function Home() {
               <Columns2 size={14} />
               <span className="hidden sm:inline">COMPARE</span>
             </button>
-            {/* 匯出 */}
             {chat1.messages.length > 0 && (
               <button onClick={handleExport}
                 className={`p-1.5 ${D.hoverBg} rounded transition-colors ${D.textMuted}`} title="匯出 .md">
                 <Download size={15} />
               </button>
             )}
-            <button onClick={toggleDark}
-              className={`p-1.5 ${D.hoverBg} rounded transition-colors ${D.textMuted}`}>
+            <button onClick={toggleDark} className={`p-1.5 ${D.hoverBg} rounded transition-colors ${D.textMuted}`}>
               {isDark ? <Sun size={15} /> : <Moon size={15} />}
             </button>
             <button onClick={() => setIsSettingsOpen(!isSettingsOpen)}
@@ -399,10 +401,9 @@ export default function Home() {
           </div>
         </header>
 
-        {/* 對話區（一般 or Compare Mode） */}
+        {/* ── 對話區 ── */}
         {compareMode ? (
           <div className="flex-1 flex min-h-0">
-            {/* Model 1 */}
             <div className={`flex-1 flex flex-col border-r ${D.border} min-w-0`}>
               <div className={`px-4 py-2 border-b ${D.border} flex items-center gap-2`}>
                 <span className={`text-[10px] tracking-[0.15em] uppercase ${D.textMuted}`}>Model A</span>
@@ -411,9 +412,9 @@ export default function Home() {
                   {MODEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
-              <MessageList messages={chat1.messages} isLoading={chat1.isLoading} endRef={messagesEndRef} />
+              <MessageList messages={chat1.messages} isLoading={chat1.isLoading}
+                endRef={messagesEndRef} isDark={isDark} D={D} />
             </div>
-            {/* Model 2 */}
             <div className="flex-1 flex flex-col min-w-0">
               <div className={`px-4 py-2 border-b ${D.border} flex items-center gap-2`}>
                 <span className={`text-[10px] tracking-[0.15em] uppercase ${D.textMuted}`}>Model B</span>
@@ -422,7 +423,8 @@ export default function Home() {
                   {MODEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
-              <MessageList messages={chat2.messages} isLoading={chat2.isLoading} endRef={messagesEndRef2} />
+              <MessageList messages={chat2.messages} isLoading={chat2.isLoading}
+                endRef={messagesEndRef2} isDark={isDark} D={D} />
             </div>
           </div>
         ) : (
@@ -440,7 +442,7 @@ export default function Home() {
                     {m.role === 'user' ? <User size={13} className={D.textMuted} /> : <Sparkles size={13} className={D.textMuted} />}
                   </div>
                   <div className={`relative group px-4 py-3 rounded text-[14px] leading-relaxed ${
-                    m.role === 'user' ? `${D.userBubble}` : D.aiBubble
+                    m.role === 'user' ? D.userBubble : D.aiBubble
                   }`}>
                     {m.role === 'user' ? <p>{m.content}</p> : <MessageContent content={m.content} isDark={isDark} />}
                     <CopyButton text={m.content} isDark={isDark} />
@@ -449,20 +451,19 @@ export default function Home() {
               </div>
             ))}
             {chat1.isLoading && (
-              <div className="flex justify-start">
-                <div className="flex gap-3">
-                  <div className={`w-7 h-7 rounded flex items-center justify-center border ${D.border} ${D.cardBg}`}>
-                    <Sparkles size={13} className={`${D.textMuted} animate-pulse`} />
-                  </div>
-                  <div className={`flex items-center gap-1.5 px-4 py-3 rounded ${D.aiBubble}`}>
-                    {[0,150,300].map(d => (
-                      <span key={d} className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#555]' : 'bg-[#ccc]'} animate-bounce`}
-                        style={{ animationDelay: `${d}ms` }} />
-                    ))}
-                  </div>
+              <div className="flex justify-start gap-3">
+                <div className={`w-7 h-7 rounded flex items-center justify-center border ${D.border} ${D.cardBg}`}>
+                  <Sparkles size={13} className={`${D.textMuted} animate-pulse`} />
+                </div>
+                <div className={`flex items-center gap-1.5 px-4 py-3 rounded ${D.aiBubble}`}>
+                  {[0, 150, 300].map(d => (
+                    <span key={d} className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#555]' : 'bg-[#ccc]'} animate-bounce`}
+                      style={{ animationDelay: `${d}ms` }} />
+                  ))}
                 </div>
               </div>
             )}
+            {/* 自動捲到底部錨點 */}
             <div ref={messagesEndRef} />
           </main>
         )}
@@ -490,8 +491,9 @@ export default function Home() {
         </footer>
       </div>
 
-      {/* 右側：設定 */}
-      <div className={`${isSettingsOpen ? 'w-68' : 'w-0'} overflow-hidden transition-all duration-300 border-l ${D.border} ${D.sidebarBg} flex flex-col`} style={{ width: isSettingsOpen ? '268px' : '0' }}>
+      {/* ── 右側：設定 ── */}
+      <div className={`overflow-hidden transition-all duration-300 border-l ${D.border} ${D.sidebarBg} flex flex-col`}
+        style={{ width: isSettingsOpen ? '268px' : '0' }}>
         <div className="p-5 space-y-5 overflow-y-auto">
           <h2 className={`text-[10px] font-semibold tracking-[0.15em] uppercase ${D.textMuted}`}>Settings</h2>
 
@@ -511,10 +513,10 @@ export default function Home() {
           </div>
 
           {[
-            { label: 'Temperature', value: temperature, setter: setTemperature, min: 0, max: 2, step: 0.1 },
-            { label: 'Max Tokens', value: maxTokens, setter: setMaxTokens, min: 100, max: 4096, step: 100 },
-            { label: 'Top P', value: topP, setter: setTopP, min: 0, max: 1, step: 0.05 },
-            { label: 'Freq. Penalty', value: frequencyPenalty, setter: setFrequencyPenalty, min: 0, max: 2, step: 0.1 },
+            { label: 'Temperature',     value: temperature,      setter: setTemperature,      min: 0,   max: 2,    step: 0.1  },
+            { label: 'Max Tokens',      value: maxTokens,        setter: setMaxTokens,        min: 100, max: 4096, step: 100  },
+            { label: 'Top P',           value: topP,             setter: setTopP,             min: 0,   max: 1,    step: 0.05 },
+            { label: 'Freq. Penalty',   value: frequencyPenalty, setter: setFrequencyPenalty, min: 0,   max: 2,    step: 0.1  },
           ].map(({ label, value, setter, min, max, step }) => (
             <div key={label} className="space-y-1.5">
               <div className="flex justify-between">
