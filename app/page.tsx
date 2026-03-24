@@ -207,16 +207,39 @@ export default function Home() {
     } catch {}
   };
 
+  // ── 圖片上傳：自動轉成 JPEG（支援 WebP、PNG 等所有格式）──
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      setImagePreview(result);
-      setImageBase64(result.split(',')[1]);
+
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      // 限制最大尺寸 1920px，避免 base64 太大
+      const maxSize = 1920;
+      let { width, height } = img;
+      if (width > maxSize || height > maxSize) {
+        if (width > height) { height = Math.round(height * maxSize / width); width = maxSize; }
+        else { width = Math.round(width * maxSize / height); height = maxSize; }
+      }
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
+      // 統一轉成 JPEG（Groq Vision 確定支援）
+      const jpeg = canvas.toDataURL('image/jpeg', 0.85);
+      setImagePreview(jpeg);
+      setImageBase64(jpeg.split(',')[1]);
+      URL.revokeObjectURL(objectUrl);
     };
-    reader.readAsDataURL(file);
+
+    img.onerror = () => {
+      alert('圖片載入失敗，請嘗試其他格式');
+      URL.revokeObjectURL(objectUrl);
+    };
+
+    img.src = objectUrl;
   };
 
   const clearImage = () => {
@@ -292,42 +315,38 @@ export default function Home() {
     if (isFirstMessage && convId) autoGenerateTitle(convId, userInput || '圖片分析');
 
     if (imageBase64) {
-      // Vision：直接用 fetch 送含圖片的請求
       const currentImageBase64 = imageBase64;
+      const currentInput = userInput;
       clearImage();
-      chat1.setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        role: 'user',
-        content: userInput || '請描述這張圖片。',
-      }]);
       chat1.setInput('');
-      // 觸發 API
+
+      // 先把 user 訊息加進去
+      const userMsgId = Date.now().toString();
+      chat1.setMessages(prev => [...prev, {
+        id: userMsgId,
+        role: 'user',
+        content: currentInput || '請描述這張圖片。',
+      }]);
+
+      // 直接呼叫 API 送圖片
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model,
-          systemPrompt,
-          temperature,
-          maxTokens,
-          topP,
-          frequencyPenalty,
+          model, systemPrompt, temperature, maxTokens, topP, frequencyPenalty,
           messages: [
             ...chat1.messages.map(m => ({ role: m.role, content: m.content })),
-            {
-              role: 'user',
-              content: userInput || '請描述這張圖片。',
-              imageBase64: currentImageBase64,
-            },
+            { role: 'user', content: currentInput || '請描述這張圖片。', imageBase64: currentImageBase64 },
           ],
         }),
       });
-      // 讀取 stream
+
       const reader = res.body?.getReader();
       if (!reader) return;
       let aiResponse = '';
       const aiId = (Date.now() + 1).toString();
       chat1.setMessages(prev => [...prev, { id: aiId, role: 'assistant', content: '' }]);
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -335,8 +354,7 @@ export default function Home() {
         const lines = chunk.split('\n').filter(l => l.startsWith('0:"'));
         for (const line of lines) {
           try {
-            const text = JSON.parse(line.slice(2));
-            aiResponse += text;
+            aiResponse += JSON.parse(line.slice(2));
             chat1.setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: aiResponse } : m));
           } catch {}
         }
@@ -450,8 +468,7 @@ export default function Home() {
               <span className="hidden sm:inline">COMPARE</span>
             </button>
             {chat1.messages.length > 0 && (
-              <button onClick={handleExport}
-                className={`p-1.5 ${D.hoverBg} rounded transition-colors ${D.textMuted}`}>
+              <button onClick={handleExport} className={`p-1.5 ${D.hoverBg} rounded transition-colors ${D.textMuted}`}>
                 <Download size={15} />
               </button>
             )}
@@ -553,15 +570,20 @@ export default function Home() {
               </div>
               <span className={`text-[11px] ${D.textMuted} flex items-center gap-1`}>
                 <ImageIcon size={11} />
-                {isVisionModel ? 'Ready to send' : 'Switch to Llama 4 Scout 👁 for vision'}
+                {isVisionModel
+                  ? 'JPEG ready · Switch model if not Llama 4 Scout'
+                  : 'Switch to Llama 4 Scout 17B 👁 for vision'}
               </span>
             </div>
           )}
           <form onSubmit={handleFormSubmit} className="max-w-3xl mx-auto flex items-center gap-2">
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+            {/* 支援所有常見圖片格式，統一轉成 JPEG */}
+            <input ref={fileInputRef} type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp,image/bmp,image/tiff"
+              onChange={handleImageUpload} className="hidden" />
             <button type="button" onClick={() => fileInputRef.current?.click()}
               className={`p-2.5 rounded border ${D.border} ${D.inputBg} ${D.hoverBg} ${D.textMuted} transition-colors shrink-0`}
-              title="上傳圖片">
+              title="上傳圖片（JPG/PNG/WebP/GIF）">
               <Paperclip size={15} />
             </button>
             <div className="relative flex-1">
@@ -600,7 +622,7 @@ export default function Home() {
             </select>
             {isVisionModel && (
               <p className={`text-[10px] ${D.textMuted} flex items-center gap-1`}>
-                <ImageIcon size={10} /> Vision enabled
+                <ImageIcon size={10} /> Vision enabled — upload any image
               </p>
             )}
           </div>
