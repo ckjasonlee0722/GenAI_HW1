@@ -2,92 +2,85 @@
 
 import { useChat } from "ai/react";
 import { useState, useEffect, useRef } from "react";
-import { Send, Settings2, User, Sparkles, SquarePen, MessageSquare, Trash2, Moon, Sun, Copy, Check } from "lucide-react";
+import {
+  Send, Settings2, User, Sparkles, SquarePen, MessageSquare,
+  Trash2, Moon, Sun, Copy, Check, Download, Columns2
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
-type Conversation = {
-  id: string;
-  title: string;
-  created_at: string;
-};
+type Conversation = { id: string; title: string; created_at: string };
 
-// Markdown 渲染組件
+// ── Markdown 渲染 ──
 function MessageContent({ content, isDark }: { content: string; isDark: boolean }) {
   return (
     <ReactMarkdown
       components={{
-        // Code block
-        code({ node, className, children, ...props }: any) {
+        code({ className, children, ...props }: any) {
           const isBlock = className?.includes("language-");
           if (isBlock) {
             return (
               <pre className={`my-3 p-4 rounded text-sm overflow-x-auto font-mono ${
-                isDark ? "bg-neutral-900 text-neutral-200 border border-neutral-700" : "bg-neutral-100 text-neutral-800 border border-neutral-200"
-              }`}>
-                <code>{children}</code>
-              </pre>
+                isDark ? "bg-neutral-900 text-neutral-200 border border-neutral-700"
+                       : "bg-neutral-100 text-neutral-800 border border-neutral-200"
+              }`}><code>{children}</code></pre>
             );
           }
-          return (
-            <code className={`px-1.5 py-0.5 rounded text-sm font-mono ${
-              isDark ? "bg-neutral-900 text-neutral-200" : "bg-neutral-100 text-neutral-700"
-            }`} {...props}>
-              {children}
-            </code>
-          );
+          return <code className={`px-1.5 py-0.5 rounded text-sm font-mono ${
+            isDark ? "bg-neutral-900 text-neutral-200" : "bg-neutral-100 text-neutral-700"
+          }`} {...props}>{children}</code>;
         },
-        // Bold
-        strong({ children }) {
-          return <strong className="font-bold">{children}</strong>;
-        },
-        // List
-        ul({ children }) {
-          return <ul className="list-disc list-inside my-2 space-y-1">{children}</ul>;
-        },
-        ol({ children }) {
-          return <ol className="list-decimal list-inside my-2 space-y-1">{children}</ol>;
-        },
-        li({ children }) {
-          return <li className="text-[15px]">{children}</li>;
-        },
-        // Paragraph
-        p({ children }) {
-          return <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>;
-        },
-        // Heading
+        strong({ children }) { return <strong className="font-bold">{children}</strong>; },
+        ul({ children }) { return <ul className="list-disc list-inside my-2 space-y-1">{children}</ul>; },
+        ol({ children }) { return <ol className="list-decimal list-inside my-2 space-y-1">{children}</ol>; },
+        li({ children }) { return <li className="text-[14px]">{children}</li>; },
+        p({ children }) { return <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>; },
         h1({ children }) { return <h1 className="text-xl font-bold mt-4 mb-2">{children}</h1>; },
         h2({ children }) { return <h2 className="text-lg font-bold mt-3 mb-2">{children}</h2>; },
         h3({ children }) { return <h3 className="text-base font-bold mt-2 mb-1">{children}</h3>; },
       }}
-    >
-      {content}
-    </ReactMarkdown>
+    >{content}</ReactMarkdown>
   );
 }
 
-// 訊息複製按鈕
+// ── 複製按鈕 ──
 function CopyButton({ text, isDark }: { text: string; isDark: boolean }) {
   const [copied, setCopied] = useState(false);
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
   return (
-    <button
-      onClick={handleCopy}
+    <button onClick={async () => {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }}
       className={`absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover:opacity-100 transition-all ${
-        isDark ? "bg-neutral-700 hover:bg-neutral-600 text-neutral-400" : "bg-neutral-100 hover:bg-neutral-200 text-neutral-500"
-      }`}
-      title="複製訊息"
-    >
-      {copied ? <Check size={13} /> : <Copy size={13} />}
+        isDark ? "bg-neutral-700 hover:bg-neutral-600 text-neutral-400"
+               : "bg-neutral-200 hover:bg-neutral-300 text-neutral-500"
+      }`} title="複製">
+      {copied ? <Check size={12} /> : <Copy size={12} />}
     </button>
+  );
+}
+
+// ── 雙 Model 單側對話泡泡 ──
+function CompareMessage({ role, content, isDark, aiBubble, userBubble, textMuted, cardBg, border }:
+  { role: string; content: string; isDark: boolean; aiBubble: string; userBubble: string; textMuted: string; cardBg: string; border: string }) {
+  return (
+    <div className={`flex ${role === 'user' ? 'justify-end' : 'justify-start'}`}>
+      <div className={`flex gap-2 max-w-[90%] ${role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+        <div className={`w-6 h-6 rounded flex items-center justify-center shrink-0 border ${border} ${cardBg}`}>
+          {role === 'user' ? <User size={11} className={textMuted} /> : <Sparkles size={11} className={textMuted} />}
+        </div>
+        <div className={`relative group px-3 py-2 rounded text-[13px] leading-relaxed ${role === 'user' ? userBubble : aiBubble}`}>
+          {role === 'user' ? <p>{content}</p> : <MessageContent content={content} isDark={isDark} />}
+          <CopyButton text={content} isDark={isDark} />
+        </div>
+      </div>
+    </div>
   );
 }
 
 export default function Home() {
   const [model, setModel] = useState("llama-3.1-8b-instant");
+  const [model2, setModel2] = useState("llama-3.3-70b-versatile");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(1024);
@@ -98,24 +91,23 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [isDark, setIsDark] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
 
-  // 自動捲到底部
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const messagesEndRef2 = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("darkMode");
     if (saved === "true") setIsDark(true);
   }, []);
 
-  const toggleDark = () => {
-    setIsDark((prev) => {
-      localStorage.setItem("darkMode", String(!prev));
-      return !prev;
-    });
-  };
+  const toggleDark = () => setIsDark(prev => {
+    localStorage.setItem("darkMode", String(!prev));
+    return !prev;
+  });
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages } = useChat({
+  // ── Chat hook 1 ──
+  const chat1 = useChat({
     api: "/api/chat",
     body: { model, systemPrompt, temperature, maxTokens, topP, frequencyPenalty },
     onFinish: async (message) => {
@@ -128,15 +120,58 @@ export default function Home() {
     },
   });
 
-  // 新訊息時自動捲到底
-  useEffect(() => { scrollToBottom(); }, [messages, isLoading]);
+  // ── Chat hook 2（Compare Mode 用）──
+  const chat2 = useChat({
+    api: "/api/chat",
+    body: { model: model2, systemPrompt, temperature, maxTokens, topP, frequencyPenalty },
+  });
 
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat1.messages, chat1.isLoading]);
+  useEffect(() => { messagesEndRef2.current?.scrollIntoView({ behavior: "smooth" }); }, [chat2.messages, chat2.isLoading]);
   useEffect(() => { fetchConversations(); }, []);
 
   const fetchConversations = async () => {
     const res = await fetch('/api/conversations');
     const data = await res.json();
     setConversations(Array.isArray(data) ? data : []);
+  };
+
+  // ── 自動生成標題 ──
+  const autoGenerateTitle = async (convId: string, firstMessage: string) => {
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          temperature: 0.3,
+          messages: [{
+            role: 'user',
+            content: `根據以下訊息，用5個字以內取一個對話標題，只回傳標題文字，不要任何標點或說明：\n"${firstMessage}"`
+          }],
+        }),
+      });
+      const reader = res.body?.getReader();
+      if (!reader) return;
+      let raw = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        raw += new TextDecoder().decode(value);
+      }
+      // 從 stream data 取出文字
+      const lines = raw.split('\n').filter(l => l.startsWith('0:"'));
+      const title = lines.map(l => {
+        try { return JSON.parse(l.slice(2)); } catch { return ''; }
+      }).join('').trim().slice(0, 20) || firstMessage.slice(0, 15);
+
+      await fetch('/api/conversations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: convId, title }),
+      });
+      setConversations(prev => prev.map(c => c.id === convId ? { ...c, title } : c));
+    } catch {}
   };
 
   const handleNewChat = async () => {
@@ -146,9 +181,10 @@ export default function Home() {
       body: JSON.stringify({ title: '新對話' }),
     });
     const newConv = await res.json();
-    setConversations((prev) => [newConv, ...prev]);
+    setConversations(prev => [newConv, ...prev]);
     setCurrentConversationId(newConv.id);
-    setMessages([]);
+    chat1.setMessages([]);
+    chat2.setMessages([]);
   };
 
   const handleSelectConversation = async (conv: Conversation) => {
@@ -156,7 +192,8 @@ export default function Home() {
     const res = await fetch(`/api/conversations/${conv.id}`);
     const data = await res.json();
     const msgs = Array.isArray(data) ? data : [];
-    setMessages(msgs.map((m: any) => ({ id: m.id, role: m.role, content: m.content })));
+    chat1.setMessages(msgs.map((m: any) => ({ id: m.id, role: m.role, content: m.content })));
+    chat2.setMessages([]);
   };
 
   const handleDeleteConversation = async (e: React.MouseEvent, id: string) => {
@@ -166,234 +203,327 @@ export default function Home() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     });
-    setConversations((prev) => prev.filter((c) => c.id !== id));
-    if (currentConversationId === id) { setCurrentConversationId(null); setMessages([]); }
+    setConversations(prev => prev.filter(c => c.id !== id));
+    if (currentConversationId === id) { setCurrentConversationId(null); chat1.setMessages([]); chat2.setMessages([]); }
   };
 
   const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!chat1.input.trim()) return;
+    const userInput = chat1.input;
     let convId = currentConversationId;
+    const isFirstMessage = chat1.messages.length === 0;
+
     if (!convId) {
       const res = await fetch('/api/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: input.slice(0, 20) }),
+        body: JSON.stringify({ title: '新對話' }),
       });
       const newConv = await res.json();
       convId = newConv.id;
       setCurrentConversationId(convId);
-      setConversations((prev) => [newConv, ...prev]);
+      setConversations(prev => [newConv, ...prev]);
     }
+
     await fetch('/api/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversation_id: convId, role: 'user', content: input }),
+      body: JSON.stringify({ conversation_id: convId, role: 'user', content: userInput }),
     });
-    handleSubmit(e);
+
+    // 自動生成標題（只在第一則訊息時）
+    if (isFirstMessage && convId) autoGenerateTitle(convId, userInput);
+
+    chat1.handleSubmit(e);
+
+    // Compare Mode：同時送給 model2
+    if (compareMode) {
+      setTimeout(() => {
+        const fakeEvent = { preventDefault: () => {} } as React.FormEvent<HTMLFormElement>;
+        chat2.setInput(userInput);
+        setTimeout(() => chat2.handleSubmit(fakeEvent), 50);
+      }, 0);
+    }
   };
 
-  // ── Donda 風格色彩 tokens ──
+  // ── 匯出 .md ──
+  const handleExport = () => {
+    const title = conversations.find(c => c.id === currentConversationId)?.title || 'conversation';
+    const content = chat1.messages.map(m =>
+      `## ${m.role === 'user' ? 'You' : 'AI'}\n\n${m.content}\n`
+    ).join('\n---\n\n');
+    const md = `# ${title}\n\n${content}`;
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title.replace(/\s+/g, '-')}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ── Donda 色彩 tokens ──
   const D = {
-    // 背景
-    pageBg:     isDark ? "bg-[#0a0a0a]"     : "bg-[#ffffff]",
-    sidebarBg:  isDark ? "bg-[#0f0f0f]"     : "bg-[#f5f5f5]",
-    cardBg:     isDark ? "bg-[#141414]"      : "bg-[#ffffff]",
-    headerBg:   isDark ? "bg-[#0a0a0a]/90"  : "bg-[#ffffff]/90",
-    inputBg:    isDark ? "bg-[#141414]"      : "bg-[#f5f5f5]",
-    footerGrad: isDark ? "from-[#0a0a0a]"   : "from-[#ffffff]",
-
-    // 邊框 — 極細
-    border:     isDark ? "border-[#1f1f1f]"  : "border-[#e5e5e5]",
-
-    // 文字
+    pageBg:      isDark ? "bg-[#0a0a0a]"    : "bg-[#ffffff]",
+    sidebarBg:   isDark ? "bg-[#0f0f0f]"    : "bg-[#f5f5f5]",
+    cardBg:      isDark ? "bg-[#141414]"     : "bg-[#ffffff]",
+    headerBg:    isDark ? "bg-[#0a0a0a]/90" : "bg-[#ffffff]/90",
+    inputBg:     isDark ? "bg-[#141414]"     : "bg-[#f5f5f5]",
+    footerGrad:  isDark ? "from-[#0a0a0a]"  : "from-[#ffffff]",
+    border:      isDark ? "border-[#1f1f1f]" : "border-[#e5e5e5]",
     textPrimary: isDark ? "text-[#f0f0f0]"  : "text-[#0a0a0a]",
     textMuted:   isDark ? "text-[#555555]"  : "text-[#999999]",
     textInput:   isDark ? "text-[#e0e0e0]"  : "text-[#0a0a0a]",
-
-    // 互動
-    hoverBg:    isDark ? "hover:bg-[#1a1a1a]" : "hover:bg-[#eeeeee]",
-    activeItem: isDark ? "bg-[#1a1a1a] text-[#f0f0f0]" : "bg-[#eeeeee] text-[#0a0a0a]",
-    inactiveItem: isDark ? "text-[#555555] hover:bg-[#141414]" : "text-[#999999] hover:bg-[#f5f5f5]",
-
-    // 訊息泡泡
-    userBubble: isDark ? "bg-[#f0f0f0] text-[#0a0a0a]" : "bg-[#0a0a0a] text-[#f0f0f0]",
-    aiBubble:   isDark ? "bg-[#141414] text-[#e0e0e0] border border-[#1f1f1f]" : "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]",
-
-    // 送出按鈕
-    sendBtn:    isDark ? "bg-[#f0f0f0] text-[#0a0a0a] hover:bg-white" : "bg-[#0a0a0a] text-[#f0f0f0] hover:bg-[#222222]",
-
-    // Placeholder
+    hoverBg:     isDark ? "hover:bg-[#1a1a1a]" : "hover:bg-[#eeeeee]",
+    activeItem:  isDark ? "bg-[#1a1a1a] text-[#f0f0f0]" : "bg-[#eeeeee] text-[#0a0a0a]",
+    inactiveItem:isDark ? "text-[#555555] hover:bg-[#141414]" : "text-[#999999] hover:bg-[#f5f5f5]",
+    userBubble:  isDark ? "bg-[#f0f0f0] text-[#0a0a0a]" : "bg-[#0a0a0a] text-[#f0f0f0]",
+    aiBubble:    isDark ? "bg-[#141414] text-[#e0e0e0] border border-[#1f1f1f]" : "bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5]",
+    sendBtn:     isDark ? "bg-[#f0f0f0] text-[#0a0a0a] hover:bg-white" : "bg-[#0a0a0a] text-[#f0f0f0] hover:bg-[#222]",
     placeholder: isDark ? "placeholder:text-[#444444]" : "placeholder:text-[#bbbbbb]",
   };
 
+  const MODEL_OPTIONS = [
+    { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B" },
+    { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B" },
+    { value: "qwen-qwq-32b", label: "Qwen QwQ 32B" },
+    { value: "meta-llama/llama-4-scout-17b-16e-instruct", label: "Llama 4 Scout 17B" },
+  ];
+
+  // ── 單側訊息列表 ──
+  const MessageList = ({ messages, isLoading, endRef }: { messages: any[]; isLoading: boolean; endRef: React.RefObject<HTMLDivElement> }) => (
+    <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+      {messages.length === 0 ? (
+        <div className="h-full flex flex-col items-center justify-center space-y-4">
+          <div className={`text-[10px] tracking-[0.3em] uppercase ${D.textMuted}`}>WAITING</div>
+        </div>
+      ) : (
+        messages.map(m => (
+          <CompareMessage key={m.id} role={m.role} content={m.content} isDark={isDark}
+            aiBubble={D.aiBubble} userBubble={D.userBubble} textMuted={D.textMuted}
+            cardBg={D.cardBg} border={D.border} />
+        ))
+      )}
+      {isLoading && (
+        <div className="flex justify-start">
+          <div className={`flex gap-2`}>
+            <div className={`w-6 h-6 rounded flex items-center justify-center border ${D.border} ${D.cardBg}`}>
+              <Sparkles size={11} className={`${D.textMuted} animate-pulse`} />
+            </div>
+            <div className={`flex items-center gap-1 px-3 py-2 rounded ${D.aiBubble}`}>
+              {[0, 150, 300].map(delay => (
+                <span key={delay} className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#555]' : 'bg-[#ccc]'} animate-bounce`}
+                  style={{ animationDelay: `${delay}ms` }} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      <div ref={endRef} />
+    </div>
+  );
+
   return (
     <div className={`flex h-screen ${D.pageBg} font-sans ${D.textPrimary} transition-colors duration-300`}
-      style={{ fontFamily: "'Inter', 'Helvetica Neue', sans-serif", letterSpacing: "0.01em" }}>
+      style={{ fontFamily: "'Inter','Helvetica Neue',sans-serif", letterSpacing: "0.01em" }}>
 
-      {/* 左側：聊天室列表 */}
-      <div className={`${isSidebarOpen ? 'w-60' : 'w-0'} overflow-hidden transition-all duration-300 border-r ${D.border} ${D.sidebarBg} flex flex-col`}>
-        <div className={`px-5 py-4 border-b ${D.border} flex items-center justify-between`}>
-          <span className={`text-[11px] font-semibold tracking-[0.15em] uppercase ${D.textMuted}`}>Conversations</span>
+      {/* 左側：對話列表 */}
+      <div className={`${isSidebarOpen ? 'w-56' : 'w-0'} overflow-hidden transition-all duration-300 border-r ${D.border} ${D.sidebarBg} flex flex-col`}>
+        <div className={`px-4 py-4 border-b ${D.border} flex items-center justify-between`}>
+          <span className={`text-[10px] font-semibold tracking-[0.15em] uppercase ${D.textMuted}`}>Conversations</span>
           <button onClick={handleNewChat} className={`p-1.5 ${D.hoverBg} rounded transition-colors ${D.textMuted}`}>
-            <SquarePen size={14} />
+            <SquarePen size={13} />
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
           {conversations.length === 0 ? (
-            <p className={`text-[11px] ${D.textMuted} text-center mt-10 tracking-wider`}>NO CONVERSATIONS</p>
-          ) : (
-            conversations.map((conv) => (
-              <div key={conv.id} onClick={() => handleSelectConversation(conv)}
-                className={`group flex items-center justify-between px-3 py-2.5 rounded cursor-pointer transition-colors ${
-                  currentConversationId === conv.id ? D.activeItem : D.inactiveItem
-                }`}>
-                <span className="text-[13px] truncate tracking-wide">{conv.title}</span>
-                <button onClick={(e) => handleDeleteConversation(e, conv.id)}
-                  className="shrink-0 p-1 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all">
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            ))
-          )}
+            <p className={`text-[10px] ${D.textMuted} text-center mt-10 tracking-wider`}>NO CONVERSATIONS</p>
+          ) : conversations.map(conv => (
+            <div key={conv.id} onClick={() => handleSelectConversation(conv)}
+              className={`group flex items-center justify-between px-3 py-2 rounded cursor-pointer transition-colors ${
+                currentConversationId === conv.id ? D.activeItem : D.inactiveItem
+              }`}>
+              <span className="text-[12px] truncate">{conv.title}</span>
+              <button onClick={e => handleDeleteConversation(e, conv.id)}
+                className="shrink-0 p-1 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all">
+                <Trash2 size={11} />
+              </button>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* 中間：對話區 */}
-      <div className={`flex-1 flex flex-col h-full ${D.pageBg}`}>
+      {/* 主區域 */}
+      <div className={`flex-1 flex flex-col h-full ${D.pageBg} min-w-0`}>
 
-        {/* Header — 極簡，無陰影 */}
-        <header className={`h-14 border-b ${D.border} flex items-center justify-between px-6 ${D.headerBg} backdrop-blur-sm`}>
-          <div className="flex items-center gap-3">
+        {/* Header */}
+        <header className={`h-13 border-b ${D.border} flex items-center justify-between px-5 ${D.headerBg} backdrop-blur-sm`} style={{ height: '52px' }}>
+          <div className="flex items-center gap-2">
             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className={`p-2 ${D.hoverBg} rounded transition-colors ${D.textMuted}`}>
-              <MessageSquare size={16} />
+              className={`p-1.5 ${D.hoverBg} rounded transition-colors ${D.textMuted}`}>
+              <MessageSquare size={15} />
             </button>
-            <span className={`text-[13px] font-medium tracking-[0.08em] uppercase ${D.textMuted}`}>
+            <span className={`text-[12px] font-medium tracking-[0.08em] uppercase ${D.textMuted}`}>
               {currentConversationId
                 ? (conversations.find(c => c.id === currentConversationId)?.title?.toUpperCase() || 'WORKSPACE')
                 : 'WORKSPACE'}
             </span>
           </div>
           <div className="flex items-center gap-1">
+            {/* Compare Mode 開關 */}
+            <button onClick={() => setCompareMode(!compareMode)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] tracking-wider transition-colors ${
+                compareMode
+                  ? (isDark ? 'bg-[#f0f0f0] text-[#0a0a0a]' : 'bg-[#0a0a0a] text-[#f0f0f0]')
+                  : `${D.hoverBg} ${D.textMuted}`
+              }`} title="Compare Models">
+              <Columns2 size={14} />
+              <span className="hidden sm:inline">COMPARE</span>
+            </button>
+            {/* 匯出 */}
+            {chat1.messages.length > 0 && (
+              <button onClick={handleExport}
+                className={`p-1.5 ${D.hoverBg} rounded transition-colors ${D.textMuted}`} title="匯出 .md">
+                <Download size={15} />
+              </button>
+            )}
             <button onClick={toggleDark}
-              className={`p-2 ${D.hoverBg} rounded transition-colors ${D.textMuted}`}
-              title={isDark ? 'Light Mode' : 'Dark Mode'}>
-              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+              className={`p-1.5 ${D.hoverBg} rounded transition-colors ${D.textMuted}`}>
+              {isDark ? <Sun size={15} /> : <Moon size={15} />}
             </button>
             <button onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-              className={`p-2 ${D.hoverBg} rounded transition-colors ${D.textMuted}`}>
-              <Settings2 size={16} />
+              className={`p-1.5 ${D.hoverBg} rounded transition-colors ${D.textMuted}`}>
+              <Settings2 size={15} />
             </button>
           </div>
         </header>
 
-        {/* 訊息區 */}
-        <main className="flex-1 overflow-y-auto px-6 py-8 space-y-6">
-          {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center space-y-6">
-              <div className={`text-[11px] tracking-[0.3em] uppercase ${D.textMuted}`}>DONDA</div>
-              <div className={`w-px h-16 ${isDark ? 'bg-[#1f1f1f]' : 'bg-[#e5e5e5]'}`} />
-              <p className={`text-[11px] tracking-[0.2em] uppercase ${D.textMuted}`}>Begin</p>
+        {/* 對話區（一般 or Compare Mode） */}
+        {compareMode ? (
+          <div className="flex-1 flex min-h-0">
+            {/* Model 1 */}
+            <div className={`flex-1 flex flex-col border-r ${D.border} min-w-0`}>
+              <div className={`px-4 py-2 border-b ${D.border} flex items-center gap-2`}>
+                <span className={`text-[10px] tracking-[0.15em] uppercase ${D.textMuted}`}>Model A</span>
+                <select value={model} onChange={e => setModel(e.target.value)}
+                  className={`text-[11px] border rounded px-2 py-1 ${D.border} ${D.inputBg} ${D.textInput} focus:outline-none`}>
+                  {MODEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <MessageList messages={chat1.messages} isLoading={chat1.isLoading} endRef={messagesEndRef} />
             </div>
-          ) : (
-            messages.map((m) => (
+            {/* Model 2 */}
+            <div className="flex-1 flex flex-col min-w-0">
+              <div className={`px-4 py-2 border-b ${D.border} flex items-center gap-2`}>
+                <span className={`text-[10px] tracking-[0.15em] uppercase ${D.textMuted}`}>Model B</span>
+                <select value={model2} onChange={e => setModel2(e.target.value)}
+                  className={`text-[11px] border rounded px-2 py-1 ${D.border} ${D.inputBg} ${D.textInput} focus:outline-none`}>
+                  {MODEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <MessageList messages={chat2.messages} isLoading={chat2.isLoading} endRef={messagesEndRef2} />
+            </div>
+          </div>
+        ) : (
+          <main className="flex-1 overflow-y-auto px-6 py-8 space-y-5">
+            {chat1.messages.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center space-y-5">
+                <div className={`text-[11px] tracking-[0.35em] uppercase ${D.textMuted}`}>DONDA</div>
+                <div className={`w-px h-14 ${isDark ? 'bg-[#1f1f1f]' : 'bg-[#e5e5e5]'}`} />
+                <p className={`text-[11px] tracking-[0.2em] uppercase ${D.textMuted}`}>Begin</p>
+              </div>
+            ) : chat1.messages.map(m => (
               <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`flex gap-3 max-w-[78%] ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                  {/* Avatar */}
                   <div className={`w-7 h-7 rounded flex items-center justify-center shrink-0 border ${D.border} ${D.cardBg}`}>
-                    {m.role === 'user'
-                      ? <User size={13} className={D.textMuted} />
-                      : <Sparkles size={13} className={D.textMuted} />}
+                    {m.role === 'user' ? <User size={13} className={D.textMuted} /> : <Sparkles size={13} className={D.textMuted} />}
                   </div>
-                  {/* 訊息泡泡 + 複製按鈕 */}
                   <div className={`relative group px-4 py-3 rounded text-[14px] leading-relaxed ${
-                    m.role === 'user' ? D.userBubble : D.aiBubble
+                    m.role === 'user' ? `${D.userBubble}` : D.aiBubble
                   }`}>
-                    {m.role === 'user' ? (
-                      <p>{m.content}</p>
-                    ) : (
-                      <MessageContent content={m.content} isDark={isDark} />
-                    )}
+                    {m.role === 'user' ? <p>{m.content}</p> : <MessageContent content={m.content} isDark={isDark} />}
                     <CopyButton text={m.content} isDark={isDark} />
                   </div>
                 </div>
               </div>
-            ))
-          )}
-          {isLoading && (
-            <div className="flex justify-start">
-              <div className={`flex gap-3`}>
-                <div className={`w-7 h-7 rounded flex items-center justify-center border ${D.border} ${D.cardBg}`}>
-                  <Sparkles size={13} className={`${D.textMuted} animate-pulse`} />
-                </div>
-                <div className={`flex items-center gap-1.5 px-4 py-3 rounded ${D.aiBubble}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#555]' : 'bg-[#ccc]'} animate-bounce`} style={{ animationDelay: '0ms' }} />
-                  <span className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#555]' : 'bg-[#ccc]'} animate-bounce`} style={{ animationDelay: '150ms' }} />
-                  <span className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#555]' : 'bg-[#ccc]'} animate-bounce`} style={{ animationDelay: '300ms' }} />
+            ))}
+            {chat1.isLoading && (
+              <div className="flex justify-start">
+                <div className="flex gap-3">
+                  <div className={`w-7 h-7 rounded flex items-center justify-center border ${D.border} ${D.cardBg}`}>
+                    <Sparkles size={13} className={`${D.textMuted} animate-pulse`} />
+                  </div>
+                  <div className={`flex items-center gap-1.5 px-4 py-3 rounded ${D.aiBubble}`}>
+                    {[0,150,300].map(d => (
+                      <span key={d} className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#555]' : 'bg-[#ccc]'} animate-bounce`}
+                        style={{ animationDelay: `${d}ms` }} />
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-          {/* 自動捲到底部的錨點 */}
-          <div ref={messagesEndRef} />
-        </main>
+            )}
+            <div ref={messagesEndRef} />
+          </main>
+        )}
 
         {/* 輸入框 */}
-        <footer className={`px-6 pb-6 pt-2 bg-gradient-to-t ${D.footerGrad} to-transparent`}>
+        <footer className={`px-5 pb-5 pt-2 bg-gradient-to-t ${D.footerGrad} to-transparent`}>
           <form onSubmit={handleFormSubmit} className="max-w-3xl mx-auto relative flex items-center">
             <input
-              className={`w-full py-3.5 pl-5 pr-12 rounded border ${D.border} ${D.inputBg} ${D.textInput} ${D.placeholder} text-[14px] tracking-wide focus:outline-none transition-all`}
-              value={input}
-              placeholder={currentConversationId ? "Message..." : "Start a new conversation..."}
-              onChange={handleInputChange}
-              disabled={isLoading}
+              className={`w-full py-3 pl-5 pr-12 rounded border ${D.border} ${D.inputBg} ${D.textInput} ${D.placeholder} text-[14px] tracking-wide focus:outline-none transition-all`}
+              value={chat1.input}
+              placeholder={compareMode ? "Send to both models..." : currentConversationId ? "Message..." : "Start a new conversation..."}
+              onChange={chat1.handleInputChange}
+              disabled={chat1.isLoading}
             />
-            <button type="submit" disabled={isLoading || !input.trim()}
+            <button type="submit" disabled={chat1.isLoading || !chat1.input.trim()}
               className={`absolute right-2 p-2 rounded transition-colors disabled:opacity-30 ${D.sendBtn}`}>
-              <Send size={15} />
+              <Send size={14} />
             </button>
           </form>
+          {compareMode && (
+            <p className={`text-center text-[10px] tracking-[0.15em] uppercase mt-2 ${D.textMuted}`}>
+              Comparing {MODEL_OPTIONS.find(o => o.value === model)?.label} vs {MODEL_OPTIONS.find(o => o.value === model2)?.label}
+            </p>
+          )}
         </footer>
       </div>
 
-      {/* 右側：設定面板 */}
-      <div className={`${isSettingsOpen ? 'w-72' : 'w-0'} overflow-hidden transition-all duration-300 border-l ${D.border} ${D.sidebarBg} flex flex-col`}>
-        <div className="p-6 space-y-6 overflow-y-auto">
-          <h2 className={`text-[11px] font-semibold tracking-[0.15em] uppercase ${D.textMuted}`}>Settings</h2>
+      {/* 右側：設定 */}
+      <div className={`${isSettingsOpen ? 'w-68' : 'w-0'} overflow-hidden transition-all duration-300 border-l ${D.border} ${D.sidebarBg} flex flex-col`} style={{ width: isSettingsOpen ? '268px' : '0' }}>
+        <div className="p-5 space-y-5 overflow-y-auto">
+          <h2 className={`text-[10px] font-semibold tracking-[0.15em] uppercase ${D.textMuted}`}>Settings</h2>
 
-          <div className="space-y-2">
-            <label className={`text-[11px] tracking-wider uppercase ${D.textMuted}`}>Model</label>
-            <select value={model} onChange={(e) => setModel(e.target.value)}
-              className={`w-full p-2.5 text-[13px] border rounded ${D.border} ${D.inputBg} ${D.textInput} focus:outline-none`}>
-              <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
-              <option value="llama-3.1-8b-instant">Llama 3.1 8B</option>
-              <option value="qwen-qwq-32b">Qwen QwQ 32B</option>
-              <option value="meta-llama/llama-4-scout-17b-16e-instruct">Llama 4 Scout 17B</option>
+          <div className="space-y-1.5">
+            <label className={`text-[10px] tracking-wider uppercase ${D.textMuted}`}>Model</label>
+            <select value={model} onChange={e => setModel(e.target.value)}
+              className={`w-full p-2 text-[12px] border rounded ${D.border} ${D.inputBg} ${D.textInput} focus:outline-none`}>
+              {MODEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
 
-          <div className="space-y-2">
-            <label className={`text-[11px] tracking-wider uppercase ${D.textMuted}`}>System Prompt</label>
-            <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)}
+          <div className="space-y-1.5">
+            <label className={`text-[10px] tracking-wider uppercase ${D.textMuted}`}>System Prompt</label>
+            <textarea value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)}
               placeholder="Define the AI's behavior..."
-              className={`w-full p-2.5 text-[13px] border rounded h-24 resize-none focus:outline-none ${D.border} ${D.inputBg} ${D.textInput} ${D.placeholder}`} />
+              className={`w-full p-2 text-[12px] border rounded h-24 resize-none focus:outline-none ${D.border} ${D.inputBg} ${D.textInput} ${D.placeholder}`} />
           </div>
 
           {[
             { label: 'Temperature', value: temperature, setter: setTemperature, min: 0, max: 2, step: 0.1 },
             { label: 'Max Tokens', value: maxTokens, setter: setMaxTokens, min: 100, max: 4096, step: 100 },
             { label: 'Top P', value: topP, setter: setTopP, min: 0, max: 1, step: 0.05 },
-            { label: 'Frequency Penalty', value: frequencyPenalty, setter: setFrequencyPenalty, min: 0, max: 2, step: 0.1 },
+            { label: 'Freq. Penalty', value: frequencyPenalty, setter: setFrequencyPenalty, min: 0, max: 2, step: 0.1 },
           ].map(({ label, value, setter, min, max, step }) => (
-            <div key={label} className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className={`text-[11px] tracking-wider uppercase ${D.textMuted}`}>{label}</label>
-                <span className={`text-[11px] font-mono ${D.textMuted}`}>{value}</span>
+            <div key={label} className="space-y-1.5">
+              <div className="flex justify-between">
+                <label className={`text-[10px] tracking-wider uppercase ${D.textMuted}`}>{label}</label>
+                <span className={`text-[10px] font-mono ${D.textMuted}`}>{value}</span>
               </div>
               <input type="range" min={min} max={max} step={step} value={value}
-                onChange={(e) => setter(parseFloat(e.target.value) as any)}
-                className={`w-full accent-neutral-500`} />
+                onChange={e => setter(parseFloat(e.target.value) as any)}
+                className="w-full accent-neutral-500" />
             </div>
           ))}
         </div>
