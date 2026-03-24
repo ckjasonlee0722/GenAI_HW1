@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "ai/react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Send, Settings2, User, Sparkles, SquarePen, MessageSquare,
   Trash2, Moon, Sun, Copy, Check, Download, Columns2, Paperclip, X, ImageIcon
@@ -18,27 +18,27 @@ function MessageContent({ content, isDark }: { content: string; isDark: boolean 
   return (
     <ReactMarkdown components={{
       code({ className, children, ...props }: any) {
-      const isBlock = className?.includes("language-");
-      const language = className?.replace("language-", "") || "text";
-      if (isBlock) return (
-        <SyntaxHighlighter
-          language={language}
-          style={isDark ? oneDark : oneLight}
-          customStyle={{
-            margin: '12px 0',
-            borderRadius: '6px',
-            fontSize: '13px',
-            border: isDark ? '1px solid #1f1f1f' : '1px solid #e5e5e5',
-          }}
-          PreTag="div"
-        >
-          {String(children).replace(/\n$/, '')}
-        </SyntaxHighlighter>
-      );
-      return <code className={`px-1.5 py-0.5 rounded text-sm font-mono ${
-        isDark ? "bg-neutral-900 text-neutral-200" : "bg-neutral-100 text-neutral-700"
-      }`} {...props}>{children}</code>;
-    },
+        const isBlock = className?.includes("language-");
+        const language = className?.replace("language-", "") || "text";
+        if (isBlock) return (
+          <SyntaxHighlighter
+            language={language}
+            style={isDark ? oneDark : oneLight}
+            customStyle={{
+              margin: '12px 0',
+              borderRadius: '6px',
+              fontSize: '13px',
+              border: isDark ? '1px solid #1f1f1f' : '1px solid #e5e5e5',
+            }}
+            PreTag="div"
+          >
+            {String(children).replace(/\n$/, '')}
+          </SyntaxHighlighter>
+        );
+        return <code className={`px-1.5 py-0.5 rounded text-sm font-mono ${
+          isDark ? "bg-neutral-900 text-neutral-200" : "bg-neutral-100 text-neutral-700"
+        }`} {...props}>{children}</code>;
+      },
       strong({ children }) { return <strong className="font-bold">{children}</strong>; },
       ul({ children }) { return <ul className="list-disc list-inside my-2 space-y-1">{children}</ul>; },
       ol({ children }) { return <ol className="list-decimal list-inside my-2 space-y-1">{children}</ol>; },
@@ -157,9 +157,18 @@ export default function Home() {
     return !prev;
   });
 
+  // ── useMemo 確保 body 穩定，不會每次 render 重建，避免打斷 streaming ──
+  const chat1Body = useMemo(() => ({
+    model, systemPrompt, temperature, maxTokens, topP, frequencyPenalty
+  }), [model, systemPrompt, temperature, maxTokens, topP, frequencyPenalty]);
+
+  const chat2Body = useMemo(() => ({
+    model: model2, systemPrompt, temperature, maxTokens, topP, frequencyPenalty
+  }), [model2, systemPrompt, temperature, maxTokens, topP, frequencyPenalty]);
+
   const chat1 = useChat({
     api: "/api/chat",
-    body: { model, systemPrompt, temperature, maxTokens, topP, frequencyPenalty },
+    body: chat1Body,
     onFinish: async (message) => {
       if (!currentConversationId) return;
       await fetch('/api/messages', {
@@ -172,7 +181,7 @@ export default function Home() {
 
   const chat2 = useChat({
     api: "/api/chat",
-    body: { model: model2, systemPrompt, temperature, maxTokens, topP, frequencyPenalty },
+    body: chat2Body,
   });
 
   const scrollToBottom = (ref: React.RefObject<HTMLDivElement | null>) => {
@@ -219,17 +228,13 @@ export default function Home() {
     } catch {}
   };
 
-  // ── 圖片上傳：自動轉成 JPEG（支援 WebP、PNG 等所有格式）──
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
-
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      // 限制最大尺寸 1920px，避免 base64 太大
       const maxSize = 1920;
       let { width, height } = img;
       if (width > maxSize || height > maxSize) {
@@ -239,18 +244,12 @@ export default function Home() {
       canvas.width = width;
       canvas.height = height;
       canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
-      // 統一轉成 JPEG（Groq Vision 確定支援）
       const jpeg = canvas.toDataURL('image/jpeg', 0.85);
       setImagePreview(jpeg);
       setImageBase64(jpeg.split(',')[1]);
       URL.revokeObjectURL(objectUrl);
     };
-
-    img.onerror = () => {
-      alert('圖片載入失敗，請嘗試其他格式');
-      URL.revokeObjectURL(objectUrl);
-    };
-
+    img.onerror = () => { alert('圖片載入失敗'); URL.revokeObjectURL(objectUrl); };
     img.src = objectUrl;
   };
 
@@ -329,20 +328,17 @@ export default function Home() {
     if (imageBase64) {
       const currentImageBase64 = imageBase64;
       const currentInput = userInput;
-      const currentPreview = imagePreview;  // ← 加這行，在 clearImage 之前
+      const currentPreview = imagePreview;
       clearImage();
       chat1.setInput('');
 
-      // 先把 user 訊息加進去
-      const userMsgId = Date.now().toString();
       chat1.setMessages(prev => [...prev, {
-        id: userMsgId,
+        id: Date.now().toString(),
         role: 'user',
         content: currentInput || '請描述這張圖片。',
-        imagePreview: currentPreview,  // ← 加這行
-      }]);
+        imagePreview: currentPreview,
+      } as any]);
 
-      // 直接呼叫 API 送圖片
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -359,7 +355,7 @@ export default function Home() {
       if (!reader) return;
       let aiResponse = '';
       const aiId = (Date.now() + 1).toString();
-      chat1.setMessages(prev => [...prev, { id: aiId, role: 'assistant', content: '' }]);
+      chat1.setMessages(prev => [...prev, { id: aiId, role: 'assistant', content: '' } as any]);
 
       while (true) {
         const { done, value } = await reader.read();
@@ -592,20 +588,17 @@ export default function Home() {
               </div>
               <span className={`text-[11px] ${D.textMuted} flex items-center gap-1`}>
                 <ImageIcon size={11} />
-                {isVisionModel
-                  ? 'JPEG ready · Switch model if not Llama 4 Scout'
-                  : 'Switch to Llama 4 Scout 17B 👁 for vision'}
+                {isVisionModel ? 'JPEG ready' : 'Switch to Llama 4 Scout 17B 👁 for vision'}
               </span>
             </div>
           )}
           <form onSubmit={handleFormSubmit} className="max-w-3xl mx-auto flex items-center gap-2">
-            {/* 支援所有常見圖片格式，統一轉成 JPEG */}
             <input ref={fileInputRef} type="file"
               accept="image/jpeg,image/png,image/gif,image/webp,image/bmp,image/tiff"
               onChange={handleImageUpload} className="hidden" />
             <button type="button" onClick={() => fileInputRef.current?.click()}
               className={`p-2.5 rounded border ${D.border} ${D.inputBg} ${D.hoverBg} ${D.textMuted} transition-colors shrink-0`}
-              title="上傳圖片（JPG/PNG/WebP/GIF）">
+              title="上傳圖片">
               <Paperclip size={15} />
             </button>
             <div className="relative flex-1">
